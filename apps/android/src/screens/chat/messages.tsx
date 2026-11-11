@@ -289,12 +289,35 @@ function UserRowResend({ ids, status, missingImages }: { ids: string[]; status: 
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
   const busyAction = useAppStore(state => state.busyAction)
+  // The newest undelivered row is last in the batch. Its delivery state and raw
+  // reason live in the store; read them as one primitive signature so streaming
+  // updates elsewhere in the session do not re-render this row.
+  const targetId = ids.at(-1)
+  const targetSignature = useAppStore(state => {
+    const sessionId = state.selectedSession?.sessionId
+    if (sessionId === undefined || targetId === undefined) return ''
+    const row = (state.messages[sessionId] ?? []).find(item => item.id === targetId)
+    if (row?.kind !== 'message' || (row.sendState !== 'failed' && row.sendState !== 'unconfirmed')) return ''
+    return `${row.sendState}\u0000${row.sendError ?? ''}`
+  })
+  const separator = targetSignature.indexOf('\u0000')
+  const targetState = separator < 0 ? undefined : targetSignature.slice(0, separator)
+  const storeReason = (separator < 0 ? '' : targetSignature.slice(separator + 1)).trim()
+  // `status` is chat-screen's `sendError ?? localized status`. A raw RPC/transport
+  // string must never sit in the primary label, so it only feeds the long-press
+  // detail and the screen-reader suffix; the visible status is always localized.
+  const localizedStatus = targetState === 'unconfirmed'
+    ? zhCN.chat.sendUnconfirmed
+    : status === zhCN.chat.sendUnconfirmed ? zhCN.chat.sendUnconfirmed : zhCN.chat.sendFailed
+  const reason = storeReason !== ''
+    ? storeReason
+    : status === zhCN.chat.sendFailed || status === zhCN.chat.sendUnconfirmed ? undefined : status
   const disabled = busyAction !== undefined || missingImages
   // One short row for the whole batch: a single failure names its status, a batch
   // leads with the count so the user can tell why one tap resends several rows.
   const label = missingImages
     ? zhCN.chat.resendImageMissing
-    : `${ids.length > 1 ? `${ids.length} × ` : ''}${status} · ${zhCN.chat.resend}`
+    : `${ids.length > 1 ? `${ids.length} × ` : ''}${localizedStatus} · ${zhCN.chat.resend}`
   const retry = () => {
     const state = useAppStore.getState()
     const selected = state.selectedSession
@@ -321,14 +344,23 @@ function UserRowResend({ ids, status, missingImages }: { ids: string[]; status: 
       ])
     } else void resend()
   }
+  // Long press surfaces the original transport cause that the inline label keeps
+  // out of the way; an empty cause falls back to the existing retry explanation.
+  const showReason = () => {
+    Alert.alert(localizedStatus, reason ?? zhCN.chat.resendConfirm, [
+      { text: zhCN.common.cancel, style: 'cancel' },
+      { text: zhCN.chat.resend, onPress: retry },
+    ])
+  }
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={reason === undefined ? label : `${label}。${reason}`}
       accessibilityState={{ disabled }}
       disabled={disabled}
       hitSlop={8}
       onPress={retry}
+      onLongPress={showReason}
       style={({ pressed }) => [styles.resendRow, compactResendStyles.row, pressed && !disabled && styles.resendRowPressed, disabled && styles.resendRowDisabled]}
     >
       <RefreshCw size={12} color={disabled ? colors.muted : colors.danger} />

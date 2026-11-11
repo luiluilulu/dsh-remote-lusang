@@ -6,26 +6,47 @@ import { sanitizeBase64, sniffImageMediaType } from '../chat-images'
 
 /** `android.app.Activity.RESULT_OK`. */
 const RESULT_OK = -1
+/** `android.app.Activity.RESULT_CANCELED`. */
+const RESULT_CANCELED = 0
+/**
+ * A handler that comes back this fast with no result did not really open an image;
+ * the emulator's Photos answers our FileProvider URI with "Editing is not supported".
+ */
+const EARLY_CANCEL_MS = 700
 /** FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION. */
 const GRANT_READ_WRITE = 1 | 2
 const EDIT_ACTION = 'android.intent.action.EDIT'
 const STREAM_EXTRA = 'android.intent.extra.STREAM'
+const TITLE_EXTRA = 'android.intent.extra.TITLE'
+const FALLBACK_FILE_NAME = 'image.jpg'
 
 export type SystemImageEdit =
   | { kind: 'edited'; uri: string; base64: string; mediaType: ImageMediaType; width: number; height: number }
   | { kind: 'canceled' }
-  /** No installed editor, unreadable result, or a revoked content-URI grant. */
+  /**
+   * No installed editor, unreadable result, a revoked content-URI grant, or an editor
+   * that bounced straight back without accepting the image. The caller then opens the
+   * bundled canvas editor.
+   */
   | { kind: 'unavailable' }
 
 /**
  * Hand a staged image to the phone's own editor (ACTION_EDIT) so the user gets the
  * gallery app they already know (crop/rotate/filters/markup) without bundling one.
  *
- * The staged copy is exposed through the app's FileProvider with read+write grants.
+ * The staged copy is exposed through the app's FileProvider with read+write grants,
+ * and the Intent carries the content URI both as `data` and as EXTRA_STREAM plus a
+ * display title, because some OEM galleries only look at EXTRA_STREAM. A real
+ * ClipData URI list would need a native module and Expo does not expose one, so this
+ * round keeps data + grant + EXTRA_STREAM; real-device gallery editors that accept
+ * data+grant work as-is.
+ *
  * Editors usually return a new URI in `result.data` (or EXTRA_STREAM), while some
- * modify the granted content URI in place, so both are re-read and compared with the
- * bytes we staged. Anything we cannot read or launch yields `unavailable` and the
- * caller falls back to the bundled canvas editor.
+ * modify the granted content URI in place, so every candidate is re-read and compared
+ * with the bytes we staged. A fast RESULT_CANCELED without any result URI means the
+ * editor does not support this image (e.g. emulator Photos) and we fall back to the
+ * bundled editor; a normal cancel after the user actually looked at the editor keeps
+ * the staged image untouched.
  */
 export async function editImageWithSystemEditor(input: {
   uri: string
@@ -42,18 +63,25 @@ export async function editImageWithSystemEditor(input: {
     return { kind: 'unavailable' }
   }
   let result: IntentLauncher.IntentLauncherResult
+  const startedAt = Date.now()
   try {
     result = await IntentLauncher.startActivityAsync(EDIT_ACTION, {
       data: contentUri,
       type: input.mediaType,
       flags: GRANT_READ_WRITE,
+      // EXTRA_STREAM is what some OEM galleries resolve the image from. Read/write
+      // grants cover both the data URI and this extra; no ClipData is attached.
+      extra: { [STREAM_EXTRA]: contentUri, [TITLE_EXTRA]: stagedFileName(input.uri) },
     })
   } catch {
     // ActivityNotFoundException (no gallery editor) or a provider that refused the grant.
     return { kind: 'unavailable' }
   }
+  const launchedMs = Date.now() - startedAt
+  const stream = streamUri(result.extra)
+  const returnedUri = typeof result.data === 'string' && result.data.length > 0 ? result.data : undefined
   let readAny = false
-  for (const candidate of [result.data, streamUri(result.extra), contentUri]) {
+  for (const candidate of [returnedUri, stream, contentUri]) {
     if (typeof candidate !== 'string' || candidate.length === 0) continue
     const base64 = await readBase64(candidate)
     if (base64 === undefined) continue
@@ -72,8 +100,25 @@ export async function editImageWithSystemEditor(input: {
       height: size?.height ?? input.height,
     }
   }
+  // Photos on the emulator rejects our FileProvider image immediately and returns
+  // RESULT_CANCELED without any result URI; that is "editor does not support this
+  // image", so let the caller silently open the bundled editor instead of doing nothing.
+  if (launchedMs < EARLY_CANCEL_MS && result.resultCode === RESULT_CANCELED && returnedUri === undefined && stream === undefined) {
+    return { kind: 'unavailable' }
+  }
   // A successful return we cannot read is an anomaly -> let the caller fall back.
   return result.resultCode === RESULT_OK && !readAny ? { kind: 'unavailable' } : { kind: 'canceled' }
+}
+
+/** Display title for EXTRA_TITLE; the staged URI ends with the picker's file name. */
+function stagedFileName(uri: string): string {
+  const raw = uri.split(/[\\/]/).pop()?.split(/[?#]/, 1)[0] ?? ''
+  if (raw.length === 0) return FALLBACK_FILE_NAME
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
 }
 
 /** EXTRA_STREAM may arrive as a string or as a marshalled object exposing a `uri`. */
