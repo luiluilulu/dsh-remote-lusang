@@ -9,10 +9,14 @@ const RESULT_OK = -1
 /** `android.app.Activity.RESULT_CANCELED`. */
 const RESULT_CANCELED = 0
 /**
- * A handler that comes back this fast with no result did not really open an image;
- * the emulator's Photos answers our FileProvider URI with "Editing is not supported".
+ * A handler that returns this soon with no result never really opened the image; the
+ * emulator's Photos answers our FileProvider URI with "Editing is not supported"
+ * after ~0.86 s. Kept at 2.5 s so slow devices/emulators still fall back instead of
+ * looking unresponsive. Tradeoff: a real user who backs out within 2.5 s is treated
+ * as "not supported" and sees the bundled editor once more (an extra step, never a
+ * lost edit); a cancel after 2.5 s stays a plain cancel.
  */
-const EARLY_CANCEL_MS = 700
+const UNSUPPORTED_RETURN_MS = 2500
 /** FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION. */
 const GRANT_READ_WRITE = 1 | 2
 const EDIT_ACTION = 'android.intent.action.EDIT'
@@ -43,10 +47,10 @@ export type SystemImageEdit =
  *
  * Editors usually return a new URI in `result.data` (or EXTRA_STREAM), while some
  * modify the granted content URI in place, so every candidate is re-read and compared
- * with the bytes we staged. A fast RESULT_CANCELED without any result URI means the
- * editor does not support this image (e.g. emulator Photos) and we fall back to the
- * bundled editor; a normal cancel after the user actually looked at the editor keeps
- * the staged image untouched.
+ * with the bytes we staged. A RESULT_CANCELED without any result URI inside
+ * UNSUPPORTED_RETURN_MS means the editor does not support this image (e.g. emulator
+ * Photos, which bounces back at ~0.86 s) and we fall back to the bundled editor; a
+ * cancel after UNSUPPORTED_RETURN_MS keeps the staged image untouched.
  */
 export async function editImageWithSystemEditor(input: {
   uri: string
@@ -100,10 +104,12 @@ export async function editImageWithSystemEditor(input: {
       height: size?.height ?? input.height,
     }
   }
-  // Photos on the emulator rejects our FileProvider image immediately and returns
-  // RESULT_CANCELED without any result URI; that is "editor does not support this
-  // image", so let the caller silently open the bundled editor instead of doing nothing.
-  if (launchedMs < EARLY_CANCEL_MS && result.resultCode === RESULT_CANCELED && returnedUri === undefined && stream === undefined) {
+  // Photos on the emulator rejects our FileProvider image and returns RESULT_CANCELED
+  // without any result URI at ~0.86 s; anything inside UNSUPPORTED_RETURN_MS that came
+  // back empty is "editor does not support this image", so let the caller silently open
+  // the bundled editor instead of doing nothing. Read-back above already runs first, so
+  // a quick return that wrote the file in place is still reported as `edited`.
+  if (launchedMs < UNSUPPORTED_RETURN_MS && result.resultCode === RESULT_CANCELED && returnedUri === undefined && stream === undefined) {
     return { kind: 'unavailable' }
   }
   // A successful return we cannot read is an anomaly -> let the caller fall back.
