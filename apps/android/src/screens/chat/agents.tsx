@@ -219,6 +219,8 @@ export interface SubagentsCardProps {
   maxHeight?: number
   onOpen?: (session: RemoteSession) => void
   testID?: string
+  /** Draw the expandable body only; the caller already owns a compact trigger. */
+  headerless?: boolean
 }
 
 /**
@@ -235,6 +237,7 @@ export const SubagentsCard = memo(function SubagentsCard({
   maxHeight,
   onOpen,
   testID = 'subagents-card',
+  headerless = false,
 }: SubagentsCardProps) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createCardStyles)
@@ -260,40 +263,42 @@ export const SubagentsCard = memo(function SubagentsCard({
 
   return (
     <View style={styles.card} testID={testID}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${title} · ${statsText}`}
-        accessibilityState={{ expanded: isOpen }}
-        onPress={handleToggle}
-        style={({ pressed }) => [styles.header, pressed && styles.pressed]}
-        testID={`${testID}-header`}
-      >
-        <View style={styles.leadIcon}>
-          <Layers size={16} color={colors.muted} />
-        </View>
+      {!headerless && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${title} · ${statsText}`}
+          accessibilityState={{ expanded: isOpen }}
+          onPress={handleToggle}
+          style={({ pressed }) => [styles.header, pressed && styles.pressed]}
+          testID={`${testID}-header`}
+        >
+          <View style={styles.leadIcon}>
+            <Layers size={16} color={colors.muted} />
+          </View>
 
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-
-        <View style={styles.progressContainer}>
-          <Text style={styles.progress} testID={`${testID}-progress`}>
-            {statsText}
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
           </Text>
-        </View>
 
-        <View style={styles.chevron}>
-          {isOpen ? (
-            <ChevronUp size={16} color={colors.muted} />
-          ) : (
-            <ChevronDown size={16} color={colors.muted} />
-          )}
-        </View>
-      </Pressable>
+          <View style={styles.progressContainer}>
+            <Text style={styles.progress} testID={`${testID}-progress`}>
+              {statsText}
+            </Text>
+          </View>
+
+          <View style={styles.chevron}>
+            {isOpen ? (
+              <ChevronUp size={16} color={colors.muted} />
+            ) : (
+              <ChevronDown size={16} color={colors.muted} />
+            )}
+          </View>
+        </Pressable>
+      )}
 
       {isOpen && (
         <View style={styles.contentWrap} testID={`${testID}-content`}>
-          <View style={styles.divider} />
+          {!headerless && <View style={styles.divider} />}
           <ScrollView
             style={[styles.list, { maxHeight: listMaxHeight }]}
             nestedScrollEnabled
@@ -348,6 +353,8 @@ export interface AgentTeamCardProps {
   maxHeight?: number
   onOpen?: (session: RemoteSession) => void
   testID?: string
+  /** Draw the expandable body only; the caller already owns a compact trigger. */
+  headerless?: boolean
 }
 
 /**
@@ -366,6 +373,7 @@ export const AgentTeamCard = memo(function AgentTeamCard({
   maxHeight,
   onOpen,
   testID = 'agent-team-card',
+  headerless = false,
 }: AgentTeamCardProps) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createCardStyles)
@@ -401,40 +409,42 @@ export const AgentTeamCard = memo(function AgentTeamCard({
 
   return (
     <View style={styles.card} testID={testID}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${title} · ${statsText}`}
-        accessibilityState={{ expanded: isOpen }}
-        onPress={handleToggle}
-        style={({ pressed }) => [styles.header, pressed && styles.pressed]}
-        testID={`${testID}-header`}
-      >
-        <View style={styles.leadIcon}>
-          <Users size={16} color={colors.muted} />
-        </View>
+      {!headerless && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${title} · ${statsText}`}
+          accessibilityState={{ expanded: isOpen }}
+          onPress={handleToggle}
+          style={({ pressed }) => [styles.header, pressed && styles.pressed]}
+          testID={`${testID}-header`}
+        >
+          <View style={styles.leadIcon}>
+            <Users size={16} color={colors.muted} />
+          </View>
 
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-
-        <View style={styles.progressContainer}>
-          <Text style={styles.progress} testID={`${testID}-progress`}>
-            {statsText}
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
           </Text>
-        </View>
 
-        <View style={styles.chevron}>
-          {isOpen ? (
-            <ChevronUp size={16} color={colors.muted} />
-          ) : (
-            <ChevronDown size={16} color={colors.muted} />
-          )}
-        </View>
-      </Pressable>
+          <View style={styles.progressContainer}>
+            <Text style={styles.progress} testID={`${testID}-progress`}>
+              {statsText}
+            </Text>
+          </View>
+
+          <View style={styles.chevron}>
+            {isOpen ? (
+              <ChevronUp size={16} color={colors.muted} />
+            ) : (
+              <ChevronDown size={16} color={colors.muted} />
+            )}
+          </View>
+        </Pressable>
+      )}
 
       {isOpen && (
         <View style={styles.contentWrap} testID={`${testID}-content`}>
-          <View style={styles.divider} />
+          {!headerless && <View style={styles.divider} />}
           <ScrollView
             style={[styles.list, { maxHeight: listMaxHeight }]}
             nestedScrollEnabled

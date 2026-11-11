@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics'
-import { ArrowDown, ArrowLeft, FileText, ListTree, Menu, MessageSquare, RefreshCw, X } from 'lucide-react-native'
+import { ArrowLeft, FileText, ListTree, Menu, MessageSquare, RefreshCw, X } from 'lucide-react-native'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
@@ -308,7 +308,11 @@ export function ChatScreen({
   const panelOpen = composerExpanded || plusMenuOpen || modelPickerOpen || modePickerOpen || permissionPickerOpen
     || workspacePickerOpen || toolPickerOpen || toolsMode !== undefined || trajectory || mentionType !== null
     || promptsPickerOpen || promptsManagerOpen || promptEditing !== null || sessionInfoOpen
-  const { listRef, viewability, awayFromLatest, newContent, jumpToLatest, beginSendScroll,
+  // The chat no longer renders a floating "jump to latest" button: tapping it
+  // kept re-anchoring the list and was the source of the reported jumping. The
+  // scroll hook still auto-follows the latest turn and re-pins on a manual fling
+  // to the bottom, so jumping back stays available without an overlay control.
+  const { listRef, viewability, beginSendScroll,
     onListLayout, onListContentSizeChange, onListScroll, onListDragEnd, onListMomentumEnd,
     onScrollBeginDrag, onMomentumScrollBegin } = useChatScroll({
     session, messages, visibleMessages, visibleSections, memoryScope, memoryKey,
@@ -1056,22 +1060,6 @@ export function ChatScreen({
             </Pressable>
           ) : undefined}
         />
-        {/* Floats over the last row only while an older turn owns the viewport. */}
-        {awayFromLatest && (
-          <View pointerEvents="box-none" style={styles.latestTurnLayer}>
-            <View pointerEvents="box-none" style={[readableColumn, styles.latestTurnColumn]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={newContent ? strings.comfort.newContent : strings.chat.jumpToLatest}
-                onPress={jumpToLatest}
-                hitSlop={6}
-                style={({ pressed }) => [styles.latestTurnButton, pressed && styles.latestTurnButtonPressed]}
-              >
-                <ArrowDown size={20} color={colors.primary} strokeWidth={2.4} />
-              </Pressable>
-            </View>
-          </View>
-        )}
       </>}</ChatErrorBoundary>}</BlurHeaderFrame>
 
 

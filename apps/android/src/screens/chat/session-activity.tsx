@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
-import { ChevronDown, ChevronUp, Flag, PauseCircle } from 'lucide-react-native'
+import { ChevronDown, ChevronUp, Flag, Layers, PauseCircle, Users } from 'lucide-react-native'
 import type { RemoteGatewayStream } from '@dsh-remote/client-core'
 import type { BackgroundJob } from '../../services/session-tools'
 import type { RemoteSession, TeamMemberSnapshot, TeamTaskSnapshot } from '../../types'
@@ -11,7 +11,7 @@ import { useTheme } from '../../ui/theme-context'
 import { useThemedStyles } from '../../ui/use-themed-styles'
 import { TaskProgressChecklist, type TodoItem } from './task-progress-checklist'
 import { BackgroundJobsCard } from './background-jobs-card'
-import { AgentTeamCard, SubagentsCard } from './agents'
+import { AgentTeamCard, formatSubagentStats, formatTeamStats, SubagentsCard } from './agents'
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed' }
@@ -67,6 +67,15 @@ export function SessionActivityDock({
     : value === 'paused' ? copy.paused : value === 'blocked' ? copy.blocked
       : value === 'failed' ? copy.failed : value === 'killed' ? copy.killed
         : value === 'stopping' ? copy.stopping : value === 'pending' ? copy.pending : copy.active
+  // Subagents and the agent team share one slim, tappable pill row so they never
+  // stack two full-width cards above the composer. Tapping a pill opens the
+  // existing list inline; tapping it again folds it back to the single row.
+  const subagentSessions = childSessions ?? []
+  const teamMembers = teamState?.members ?? []
+  const subagentStats = formatSubagentStats(subagentSessions)
+  const teamStats = formatTeamStats(teamMembers, sessions ?? [])
+  const hasSubagents = subagentSessions.length > 0
+  const hasTeam = teamMembers.length > 0
 
   useEffect(() => {
     const controller = new AbortController()
@@ -128,22 +137,64 @@ export function SessionActivityDock({
         maxHeight={detailsHeight}
       />
     )}
-    {childSessions && childSessions.length > 0 && (
+    {(hasSubagents || hasTeam) && (
+      <View style={styles.compactRow} testID="session-activity-compact">
+        {hasSubagents && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${copy.subagents} · ${subagentStats.statsText}`}
+            accessibilityState={{ expanded: expanded === 'subagents' }}
+            onPress={() => toggle('subagents')}
+            hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+            style={({ pressed }) => [
+              styles.compactPill,
+              expanded === 'subagents' && styles.compactPillOpen,
+              pressed && styles.compactPillPressed,
+            ]}
+            testID="session-activity-subagents-pill"
+          >
+            <Layers size={13} color={expanded === 'subagents' ? colors.primary : colors.muted} />
+            <Text style={styles.compactPillText} numberOfLines={1}>{copy.subagents}</Text>
+            <Text style={styles.compactPillCount} numberOfLines={1}>{subagentStats.statsText}</Text>
+          </Pressable>
+        )}
+        {hasTeam && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${copy.team} · ${teamStats.statsText}`}
+            accessibilityState={{ expanded: expanded === 'team' }}
+            onPress={() => toggle('team')}
+            hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+            style={({ pressed }) => [
+              styles.compactPill,
+              expanded === 'team' && styles.compactPillOpen,
+              pressed && styles.compactPillPressed,
+            ]}
+            testID="session-activity-team-pill"
+          >
+            <Users size={13} color={expanded === 'team' ? colors.primary : colors.muted} />
+            <Text style={styles.compactPillText} numberOfLines={1}>{copy.team}</Text>
+            <Text style={styles.compactPillCount} numberOfLines={1}>{teamStats.statsText}</Text>
+          </Pressable>
+        )}
+      </View>
+    )}
+    {expanded === 'subagents' && hasSubagents && (
       <SubagentsCard
-        sessions={childSessions}
-        expanded={expanded === 'subagents'}
-        onToggle={() => toggle('subagents')}
+        headerless
+        sessions={subagentSessions}
+        expanded
         onOpen={onOpenSession}
         maxHeight={detailsHeight}
       />
     )}
-    {teamState !== undefined && teamState.members && teamState.members.length > 0 && (
+    {expanded === 'team' && hasTeam && (
       <AgentTeamCard
-        members={teamState.members}
-        tasks={teamState.tasks ?? []}
+        headerless
+        members={teamMembers}
+        tasks={teamState?.tasks ?? []}
         sessions={sessions ?? []}
-        expanded={expanded === 'team'}
-        onToggle={() => toggle('team')}
+        expanded
         onOpen={onOpenSession}
         maxHeight={detailsHeight}
       />
@@ -166,6 +217,13 @@ function Disclosure({ title, icon, open, onPress, children, trailing }: { traili
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   dock: { gap: spacing.xxs, marginHorizontal: spacing.xs, marginBottom: spacing.xs },
+  // One slim row (pill height 26 + row min 28) replaces the two stacked 44 dp cards.
+  compactRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  compactPill: { height: 26, maxWidth: '48%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceStrong, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  compactPillOpen: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  compactPillPressed: { opacity: 0.72 },
+  compactPillText: { ...typography.caption, color: colors.ink, flexShrink: 1 },
+  compactPillCount: { ...typography.caption, color: colors.muted, fontVariant: ['tabular-nums'] },
   group: { borderRadius: radius.xl, backgroundColor: colors.card, overflow: 'hidden' },
   header: { minHeight: 44, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   pressed: { backgroundColor: colors.surfaceStrong },
