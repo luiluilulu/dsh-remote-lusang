@@ -20,9 +20,15 @@ type Options = {
   stagedFiles: StagedFile[]
   setStagedFiles: React.Dispatch<React.SetStateAction<StagedFile[]>>
   sessionGenerationRef: MutableRefObject<number>
+  /**
+   * Opens the in-app editor (crop + blue marks in one screen) for a fresh capture or a
+   * single library pick, and resolves the image to stage. Cancelling resolves the
+   * untouched original instead of dropping it.
+   */
+  editPickedImage?: (image: PromptImage) => Promise<PromptImage | undefined>
 }
 
-export function useChatAttachments({ session, memoryKey, images, setImages, stagedFiles, setStagedFiles, sessionGenerationRef }: Options) {
+export function useChatAttachments({ session, memoryKey, images, setImages, stagedFiles, setStagedFiles, sessionGenerationRef, editPickedImage }: Options) {
   const [pickingImages, setPickingImages] = useState(false)
   const [pickingFiles, setPickingFiles] = useState(false)
   const pickImage = async (source: 'camera' | 'library') => {
@@ -44,7 +50,7 @@ export function useChatAttachments({ session, memoryKey, images, setImages, stag
         }
       }
       const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 1, base64: true })
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1, base64: true })
         : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           allowsMultipleSelection: true,
@@ -56,7 +62,14 @@ export function useChatAttachments({ session, memoryKey, images, setImages, stag
         })
       if (result.canceled) return
       const picked = result.assets.map(promptImageFromAsset)
-      const next = [...images, ...picked]
+      // One capture or a single library pick goes straight into the in-app editor so
+      // crop + marks happen on one screen; multi-select is staged as-is (each tray
+      // thumbnail can still be edited from its pencil badge).
+      const editSingle = editPickedImage !== undefined && (source === 'camera' || picked.length === 1)
+      const first = picked[0]
+      const edited = editSingle && first !== undefined ? await editPickedImage(first) : undefined
+      if (editSingle && edited === undefined) return
+      const next = [...images, ...(edited === undefined ? picked : [edited])]
       const problem = validatePromptImages(next, limits)
       if (problem !== undefined) {
         Alert.alert(strings.chat.imageLimitTitle, problem)

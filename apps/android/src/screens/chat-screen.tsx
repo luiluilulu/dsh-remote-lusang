@@ -14,7 +14,6 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View
 } from 'react-native'
@@ -64,7 +63,6 @@ import { ChatActionMenu } from './chat/action-menu'
 import { ChatComposer } from './chat/composer'
 import { ExpandedComposer } from './chat/expanded-composer'
 import { ImageEditor, type ImageEditorExport } from './chat/image-editor'
-import { editImageWithSystemEditor } from './chat/system-image-editor'
 import {
   ChatImages,
   ChatItemView,
@@ -252,10 +250,11 @@ export function ChatScreen({
   }, [setQuotes, composerInputRef])
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([])
   const sessionGenerationRef = useRef(0)
-  // Staged thumbnails open the phone's own image editor first (gallery app: crop,
-  // rotate, filters, markup). Only when no ACTION_EDIT activity is available does
-  // the bundled canvas fallback open. The edited bytes replace that exact slot.
-  const [imageEditorTarget, setImageEditorTarget] = useState<{ image: PromptImage; index: number }>()
+  // The in-app canvas editor is the only editor: one screen with crop + blue marks.
+  // A fresh capture or a single library pick opens it right away; a staged thumbnail
+  // reopens it from its pencil badge (tapping the thumbnail itself only previews).
+  const [imageEditorTarget, setImageEditorTarget] = useState<{ image: PromptImage; index?: number }>()
+  const pendingEditorResolve = useRef<((image: PromptImage | undefined) => void) | undefined>(undefined)
   useLayoutEffect(() => {
     let lastSessionId = useAppStore.getState().selectedSession?.sessionId
     return useAppStore.subscribe((state) => {
@@ -264,82 +263,77 @@ export function ChatScreen({
         lastSessionId = currentId
         sessionGenerationRef.current += 1
         setStagedFiles([])
-        // The canvas fallback belongs to the previous conversation.
+        // An editor opened from the previous conversation must not stage into this one.
         setImageEditorTarget(undefined)
+        const resolve = pendingEditorResolve.current
+        pendingEditorResolve.current = undefined
+        resolve?.(undefined)
       }
     })
   }, [])
   const imageEditLimits = session === undefined ? undefined : sessionImageLimits(session)
   const imageEditorMaxEdge = Math.min(3072, imageEditLimits?.maxImageDimension ?? 3072)
-  const systemEditorBusy = useRef(false)
-  const replaceStagedImage = (index: number, built: PromptImage): string | undefined => {
-    const next = images.map((image, i) => i === index ? built : image)
-    const problem = validatePromptImages(next, imageEditLimits)
-    if (problem !== undefined) return problem
-    setImages(next)
-    return undefined
-  }
-  const editedPromptImage = (info: { uri?: string; base64: string; mediaType: string; width: number; height: number }, template: PromptImage): PromptImage =>
+  const editedPromptImage = (exported: ImageEditorExport, template: PromptImage): PromptImage =>
     promptImageFromBase64({
-      // A system edit lands in a new cache file; the canvas fallback stays in memory.
-      uri: info.uri ?? `data:${info.mediaType};base64,${info.base64}`,
-      base64: info.base64,
-      mimeType: info.mediaType,
+      // The tray renders the result from this in-memory URI; only `data` is sent.
+      uri: `data:image/jpeg;base64,${exported.base64}`,
+      base64: exported.base64,
+      mimeType: 'image/jpeg',
       ...(template.name === undefined ? {} : { name: template.name }),
-      width: info.width,
-      height: info.height,
+      width: exported.width,
+      height: exported.height,
     })
-  const openStagedImageEditor = async (image: PromptImage, index: number) => {
-    // expo-intent-launcher rejects concurrent starts; a double tap must not race
-    // the system editor and the bundled fallback.
-    if (systemEditorBusy.current) return
-    systemEditorBusy.current = true
-    try {
-      Keyboard.dismiss()
-      const generation = sessionGenerationRef.current
-      const outcome = await editImageWithSystemEditor({
-        uri: image.uri,
-        mediaType: image.mediaType,
-        base64: image.data,
-        width: image.width,
-        height: image.height,
-      })
-      // The user may have left the conversation while the system editor was open.
-      if (sessionGenerationRef.current !== generation) return
-      if (outcome.kind === 'unavailable') {
-        setImageEditorTarget({ image, index })
-        return
-      }
-      if (outcome.kind !== 'edited') return
-      let built: PromptImage
-      try {
-        built = editedPromptImage(outcome, image)
-      } catch {
-        Alert.alert(strings.chat.imagePickerFailedTitle, strings.chat.imageEditorFailedBody)
-        return
-      }
-      const problem = replaceStagedImage(index, built)
-      if (problem !== undefined) Alert.alert(strings.chat.imageLimitTitle, problem)
-    } finally {
-      systemEditorBusy.current = false
-    }
+  const closeImageEditor = (kept: PromptImage | undefined) => {
+    setImageEditorTarget(undefined)
+    const resolve = pendingEditorResolve.current
+    pendingEditorResolve.current = undefined
+    resolve?.(kept)
+  }
+  const editPickedImage = (image: PromptImage): Promise<PromptImage | undefined> => new Promise(resolve => {
+    pendingEditorResolve.current = resolve
+    setImageEditorTarget({ image })
+  })
+  const openStagedImageEditor = (image: PromptImage, index: number) => {
+    Keyboard.dismiss()
+    pendingEditorResolve.current = undefined
+    setImageEditorTarget({ image, index })
+  }
+  const cancelImageEditor = () => {
+    const target = imageEditorTarget
+    if (target === undefined) return
+    // Cancelling a fresh capture keeps the untouched photo so nothing is lost; a
+    // cancelled staged edit simply leaves the staged image alone.
+    closeImageEditor(target.index === undefined ? target.image : undefined)
   }
   const saveEditedImage = (exported: ImageEditorExport): string | undefined => {
     const target = imageEditorTarget
     if (target === undefined) return strings.chat.imageEditorFailedBody
     let built: PromptImage
     try {
-      built = editedPromptImage({ base64: exported.base64, mediaType: 'image/jpeg', width: exported.width, height: exported.height }, target.image)
+      built = editedPromptImage(exported, target.image)
     } catch {
       return strings.chat.imageEditorFailedBody
     }
-    const problem = replaceStagedImage(target.index, built)
+    if (target.index === undefined) {
+      const problem = validatePromptImages([...images, built], imageEditLimits)
+      if (problem !== undefined) return problem
+      closeImageEditor(built)
+      return undefined
+    }
+    const next = images.map((image, index) => index === target.index ? built : image)
+    const problem = validatePromptImages(next, imageEditLimits)
     if (problem !== undefined) return problem
+    setImages(next)
     setImageEditorTarget(undefined)
     return undefined
   }
+  useEffect(() => () => {
+    const resolve = pendingEditorResolve.current
+    pendingEditorResolve.current = undefined
+    resolve?.(undefined)
+  }, [])
   const { canAttachImages, attachmentPicking, pickImages, takePhoto, pickFiles } = useChatAttachments({
-    session, memoryKey, images, setImages, stagedFiles, setStagedFiles, sessionGenerationRef,
+    session, memoryKey, images, setImages, stagedFiles, setStagedFiles, sessionGenerationRef, editPickedImage,
   })
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const [referenceChatOpen, setReferenceChatOpen] = useState(false)
@@ -1213,16 +1207,23 @@ export function ChatScreen({
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.imageTray}>
             {images.map((image, index) => (
               <View key={`${index}:${image.bytes}`} style={styles.imagePreviewWrap}>
+                {/* Tapping the picture only previews it full-screen; the pencil badge edits. */}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={strings.chat.editImage(image.name ?? `${index + 1}`)}
-                  onPress={() => void openStagedImageEditor(image, index)}
+                  accessibilityLabel={image.name ?? strings.chat.unnamedImage}
+                  onPress={() => setPreviewImageUri(image.uri)}
                   style={styles.imagePreviewButton}
                 >
                   <Image source={{ uri: image.uri }} style={styles.imagePreview} resizeMode="cover" />
-                  <View style={styles.imageEditBadge}>
-                    <Pencil size={11} color={colors.white} />
-                  </View>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={strings.chat.editImage(image.name ?? `${index + 1}`)}
+                  onPress={() => openStagedImageEditor(image, index)}
+                  style={styles.imageEditBadge}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Pencil size={11} color={colors.white} />
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -1391,8 +1392,14 @@ export function ChatScreen({
         onRequestClose={() => setPreviewImageUri(undefined)}
         statusBarTranslucent
       >
-        <View style={styles.lightboxBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPreviewImageUri(undefined)} />
+        {/* Tap anywhere on the picture to close; the picture itself must not swallow taps,
+            so the press target is the container, not a sibling under the image. */}
+        <Pressable
+          style={styles.lightboxBackdrop}
+          accessibilityRole="button"
+          accessibilityLabel={strings.common.close}
+          onPress={() => setPreviewImageUri(undefined)}
+        >
           {previewImageUri !== undefined && (
             <Image
               source={{ uri: previewImageUri }}
@@ -1409,7 +1416,7 @@ export function ChatScreen({
           >
             <X size={24} color="#ffffff" />
           </Pressable>
-        </View>
+        </Pressable>
       </Modal>
       <PluginsModal visible={pluginsOpen} onClose={() => setPluginsOpen(false)} />
       <AutomationTasksModal
@@ -1426,10 +1433,10 @@ export function ChatScreen({
       />
       {imageEditorTarget !== undefined && (
         <ImageEditor
-          key={`${imageEditorTarget.index}:${imageEditorTarget.image.bytes}`}
+          key={`${String(imageEditorTarget.index ?? 'capture')}:${imageEditorTarget.image.bytes}`}
           source={imageEditorTarget.image}
           maxEdge={imageEditorMaxEdge}
-          onCancel={() => setImageEditorTarget(undefined)}
+          onCancel={cancelImageEditor}
           onSave={saveEditedImage}
         />
       )}

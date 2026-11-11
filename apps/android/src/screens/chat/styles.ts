@@ -183,7 +183,7 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     imagePreviewWrap: { width: 72, height: 72 },
     imagePreviewButton: { width: 72, height: 72, borderRadius: radius.sm, overflow: 'hidden' },
     imagePreview: { width: 72, height: 72, borderRadius: radius.sm, backgroundColor: colors.surfaceStrong },
-    imageEditBadge: { position: 'absolute', left: 4, bottom: 4, width: 20, height: 20, borderRadius: radius.pill, backgroundColor: 'rgba(15, 15, 15, 0.62)', alignItems: 'center', justifyContent: 'center' },
+    imageEditBadge: { position: 'absolute', right: 4, bottom: 4, zIndex: 1, width: 20, height: 20, borderRadius: radius.pill, backgroundColor: 'rgba(15, 15, 15, 0.62)', alignItems: 'center', justifyContent: 'center' },
     removeImageButton: { position: 'absolute', right: -3, top: -3, width: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
     fileTray: { gap: spacing.xs, paddingBottom: spacing.xs },
     fileCard: {
