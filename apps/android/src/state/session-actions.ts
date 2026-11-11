@@ -415,8 +415,23 @@ export function createSessionActions({ get, set, runtime }: SessionAccess): Pick
             new Set(items.flatMap(item => item.kind === 'message' && item.requestRpcId !== undefined ? [item.requestRpcId] : [])),
             runtime.connectionStartedAt,
           )
-          const restored = nextSession.running === false ? settleTurnItems(reconciled)
-            : authoritativeLifecycle?.turn === undefined ? reconciled : settleTurnItems(reconciled, undefined, authoritativeLifecycle.turn)
+          // A prompt acknowledged on this connection can still be missing from
+          // both history and the inbox (lost event after commit). Once the Host
+          // proves the session is idle and neither source knows the requestId,
+          // settle the optimistic row as unconfirmed instead of leaving the
+          // composer stuck on "sending" forever. Late echoes still replace it.
+          const historyRpcIds = new Set(items.flatMap(item => item.kind === 'message' && item.requestRpcId !== undefined ? [item.requestRpcId] : []))
+          const runningNow = nextSession.running === true || authoritativeLifecycle?.running === true
+          const unsettled = inboxSnapshot === undefined || runningNow ? reconciled : (() => {
+            const queuedRpcIds = inboxRpcIds(inboxSnapshot)
+            return reconciled.map(item => item.kind === 'message' && item.id.startsWith('local:')
+              && item.sendState === undefined && item.requestRpcId !== undefined
+              && !queuedRpcIds.has(item.requestRpcId) && !historyRpcIds.has(item.requestRpcId)
+              ? { ...item, sendState: 'unconfirmed' as const }
+              : item)
+          })()
+          const restored = nextSession.running === false ? settleTurnItems(unsettled)
+            : authoritativeLifecycle?.turn === undefined ? unsettled : settleTurnItems(unsettled, undefined, authoritativeLifecycle.turn)
           if (canPersistSnapshot()) saveSessionMessagesSnapshot(memoryScope, session.sessionId, restored)
           return {
             selectedSession: nextSession,
