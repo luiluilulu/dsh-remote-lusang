@@ -110,6 +110,20 @@ export function KeyboardInset({ children }: { children: ReactNode }) {
     return () => subscription.remove()
   }, [])
 
+  // Some Android ROMs drop `keyboardDidHide` when the IME is dismissed by the
+  // app itself (e.g. right after sending a prompt while the list re-measures).
+  // A stale screenY would then reserve the keyboard band forever and leave a
+  // large blank area under the last message, so reconcile from live metrics
+  // until the reserved band is actually gone.
+  useEffect(() => {
+    if (keyboardScreenY === null) return
+    const timer = setInterval(() => {
+      if (Keyboard.isVisible()) return
+      setKeyboardScreenY(null)
+    }, 400)
+    return () => clearInterval(timer)
+  }, [keyboardScreenY])
+
   // When keyboard is open:
   // - If window did not shrink (e.g. Android 15 edge-to-edge): windowHeight - keyboardScreenY gives the exact IME overlap.
   // - If adjustResize already shrunk the window: windowHeight <= keyboardScreenY, cover collapses to 0 (no extra padding).

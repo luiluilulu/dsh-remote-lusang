@@ -17,6 +17,17 @@ type Options = {
   setTrajectory: (value: boolean) => void
 }
 
+/**
+ * Bounded re-assert of the list end after a row is (re)measured. A tall row
+ * (long prompt or long reply) gets its final height a few frames after mount,
+ * so the first `scrollToEnd` can land short and leave blank space below the
+ * last row until the next streaming delta arrives. Six to eight frames cover
+ * that window while still stopping on an idle list.
+ */
+const FOLLOW_BURST_FRAMES = 8
+const FOLLOW_BURST_WINDOW_MS = 480
+const FOLLOW_BURST_FRAME_MS = 48
+
 export function useChatScroll({ session, messages, visibleMessages, visibleSections, memoryScope, memoryKey, panelOpen, historyLoadingOlder, busy, setTrajectory }: Options) {
   const sessionId = session?.sessionId
   const listRef = useRef<FlatList<ChatSection>>(null)
@@ -28,6 +39,8 @@ export function useChatScroll({ session, messages, visibleMessages, visibleSecti
   const userScrollingRef = useRef(false)
   const hasTrailingScrollRef = useRef(false)
   const pendingScrollStreakRef = useRef(0)
+  /** Start of the bounded re-assert burst that follows a new measured row. */
+  const followBurstStartRef = useRef(0)
   const scrollIntentGenerationRef = useRef(0)
   /** Keep the viewport on the latest turn until the user scrolls away. */
   const pinToBottomRef = useRef(true)
@@ -55,6 +68,7 @@ export function useChatScroll({ session, messages, visibleMessages, visibleSecti
   const cancelPendingScroll = useCallback(() => {
     hasTrailingScrollRef.current = false
     pendingScrollStreakRef.current = 0
+    followBurstStartRef.current = 0
     if (scrollTimerRef.current !== null) clearTimeout(scrollTimerRef.current)
     if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
     scrollTimerRef.current = null
@@ -80,21 +94,41 @@ export function useChatScroll({ session, messages, visibleMessages, visibleSecti
           || (!pinToBottomRef.current && !initialPinRef.current)) {
           hasTrailingScrollRef.current = false
           pendingScrollStreakRef.current = 0
+          followBurstStartRef.current = 0
           return
         }
         lastAutoScrollAt.current = Date.now()
+        const previousOffset = listOffsetRef.current
+        const previousHeight = listContentRef.current.height
         // Nonanimated commands also keep native momentum callbacks reserved
         // for user flings, so they cannot disable following during a reply.
         listRef.current?.scrollToEnd({ animated: false })
 
-        if (hasTrailingScrollRef.current && pendingScrollStreakRef.current < 2) {
-          hasTrailingScrollRef.current = false
+        // A freshly appended tall row is measured over the next frames, so the
+        // first scrollToEnd can land on the pre-measure height and leave the
+        // viewport above the real end (a visible blank under the last row).
+        // Re-assert the end in a short bounded burst instead of only two
+        // trailing passes, and stop as soon as both offset and content size
+        // settle so an idle list never keeps scheduling scroll commands.
+        const now = Date.now()
+        if (followBurstStartRef.current === 0) followBurstStartRef.current = now
+        const stillSettling = hasTrailingScrollRef.current
+          || Math.abs(listOffsetRef.current - previousOffset) > 1
+          || Math.abs(listContentRef.current.height - previousHeight) > 1
+        const burstOpen = now - followBurstStartRef.current < FOLLOW_BURST_WINDOW_MS
+          && pendingScrollStreakRef.current < FOLLOW_BURST_FRAMES
+        if (burstOpen && (stillSettling || pendingScrollStreakRef.current > 0)) {
           pendingScrollStreakRef.current += 1
-          scheduleScrollToBottom()
-        } else {
           hasTrailingScrollRef.current = false
-          pendingScrollStreakRef.current = 0
+          scrollTimerRef.current = setTimeout(() => {
+            scrollTimerRef.current = null
+            runScroll()
+          }, FOLLOW_BURST_FRAME_MS)
+          return
         }
+        hasTrailingScrollRef.current = false
+        pendingScrollStreakRef.current = 0
+        followBurstStartRef.current = 0
       })
     }
 
