@@ -125,7 +125,12 @@ export class CodexPeerBridge {
 
   closeStream(input: unknown): { closed: true; streamId: string } {
     const params = streamCloseSchema.parse(input)
+    const threadId = this.streams.get(params.streamId)
     this.streams.delete(params.streamId)
+    // The last Remote observer of a Thread no longer needs the Host App Server
+    // to keep its cross-process writer lease; release it when the Thread is
+    // also idle so the desktop Codex app can open the conversation.
+    if (threadId !== undefined) void this.domain.releaseThreadWriterIfIdle(threadId)
     return { closed: true, streamId: params.streamId }
   }
 
@@ -270,6 +275,7 @@ export class CodexPeerBridge {
         this.streams.delete(streamId)
         await this.publish('codex.app.stream.closed', { streamId, reason: 'failed' })
         this.logger?.warn('Codex stream closed after oversized frame', { streamId })
+        void this.domain.releaseThreadWriterIfIdle(threadId)
         continue
       }
       await this.publish('codex.app.frame', data)
@@ -292,10 +298,11 @@ export class CodexPeerBridge {
     if (this.closed) return
     this.closed = true
     const streamIds = [...this.streams.keys()]
+    const threadIds = [...new Set(this.streams.values())]
     this.streams.clear()
     this.incomingTransfers.clear()
     this.outgoingTransfers.clear()
-    const detach = this.domain.detachPeer(this.context.connectionId)
+    const detach = this.domain.detachPeer(this.context.connectionId, threadIds)
     await Promise.all([detach, ...streamIds.map(streamId => this.publish('codex.app.stream.closed', {
       streamId,
       reason: 'peer-disconnected',

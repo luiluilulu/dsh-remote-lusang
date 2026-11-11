@@ -10,6 +10,9 @@ import type { PeerConnectionContext } from '../connection-controller.js'
 import type { SafeLogger } from '../logging.js'
 import { RpcError } from '../safe-error.js'
 import {
+  CODEX_THREAD_CLOSING,
+  CODEX_THREAD_GONE,
+  CODEX_THREAD_GONE_MESSAGE,
   CODEX_THREAD_UNMATERIALIZED,
   CodexAppServerClient,
   CodexAppServerError,
@@ -33,6 +36,8 @@ const MAX_CODEX_PAGES = 32
 const CODEX_HISTORY_PAGE_LIMIT = 25
 const MAX_CODEX_HISTORY_PAGES = 64
 const CODEX_DIRECTORY_ENTRY_LIMIT = 500
+/** Delay before retrying a Thread that the App Server is still closing. */
+const CODEX_THREAD_CLOSING_RETRY_MS = 250
 
 interface PendingApproval {
   upstreamId: string | number
@@ -103,6 +108,18 @@ export class CodexRemoteDomain {
    * a session history and its first prompt arrive together.
    */
   private readonly knownThreadPromises = new Map<string, Promise<{ thread: Record<string, unknown>; cwd?: string }>>()
+  /**
+   * In-flight upstream `thread/unsubscribe` calls. A new request for the same
+   * Thread waits for its release to settle so the App Server cannot unload the
+   * Thread between our release and a following resume/turn.
+   */
+  private readonly releasingThreads = new Map<string, Promise<void>>()
+  /**
+   * Threads the App Server reported as no longer available. They are filtered
+   * from later `thread/list` results so clients do not keep showing a session
+   * that can never be opened until the App Server instance is replaced.
+   */
+  private readonly goneThreads = new Set<string>()
   private state: 'disabled' | 'starting' | 'ready' | 'restarting' | 'unavailable' = 'disabled'
   private unavailableCode?: string
 
@@ -221,10 +238,10 @@ export class CodexRemoteDomain {
       const result = sanitizeThreadList(await this.callUpstream(call.method, call.params)) as {
         data: Record<string, unknown>[]
       }
-      return filterThreadListByWorkspaceAuthority(
+      return this.withoutGoneThreads(filterThreadListByWorkspaceAuthority(
         result,
         await this.readWorkspaceAuthority(result.data),
-      )
+      ))
     }
     if (call.method === 'thread/start') {
       const cwd = await this.requireCodexWorkspacePath(call.params.cwd as string)
@@ -245,6 +262,10 @@ export class CodexRemoteDomain {
     }
 
     const threadId = threadIdFromParams(call.params)
+    // Never start a new request while the same Thread is still being released
+    // upstream: otherwise the App Server could unload it between unsubscribe
+    // and resume/turn/start.
+    if (threadId !== undefined) await this.awaitThreadRelease(threadId)
 
     if (call.method === 'dsh/sessionHistory') {
       const thread = await this.readThreadForHistory(connectionId, threadId!)
@@ -340,7 +361,7 @@ export class CodexRemoteDomain {
           : permission.params
       let result: unknown
       try {
-        result = await this.callUpstream(call.method, upstreamParams)
+        result = await this.callWithClosingRetry(call.method, upstreamParams, assertCurrent)
       } catch (error) {
         assertCurrent()
         // App Server rejects thread/resume when this process already has the
@@ -396,7 +417,7 @@ export class CodexRemoteDomain {
     return { resolved: true }
   }
 
-  async detachPeer(connectionId: string): Promise<void> {
+  async detachPeer(connectionId: string, threadIds: readonly string[] = []): Promise<void> {
     const bridge = this.peers.get(connectionId)
     if (bridge !== undefined) this.peers.delete(connectionId)
     this.peerDeviceIds.delete(connectionId)
@@ -410,6 +431,58 @@ export class CodexRemoteDomain {
       await appServer?.respond(approval.upstreamId, { decision: 'decline' }).catch(() => undefined)
     }
     this.scheduleApprovalExpiry()
+    // The connection may have been the last Remote subscriber of a Thread that
+    // it resumed earlier. Release the App Server writer lease so the desktop
+    // Codex app can open that conversation again; active turns are protected
+    // by the App Server's own idle-unload policy.
+    for (const threadId of new Set(threadIds)) void this.releaseThreadWriterIfIdle(threadId)
+  }
+
+  /**
+   * Release the upstream Codex writer lease for an idle Thread that no Remote
+   * connection observes anymore. The Remote layer never unsubscribed before:
+   * every prompt resumed the Thread in the Host App Server and the process kept
+   * the cross-process writer lock (`~/.codex/thread-writer-locks`) until its
+   * 30 minute idle unload, so desktop Codex reported the conversation as open
+   * in another application. `thread/unsubscribe` plus the shorter
+   * `thread_unload_delay_secs` spawn argument unload it within the unload delay.
+   */
+  async releaseThreadWriterIfIdle(threadId: string): Promise<void> {
+    if (this.closed || !this.isAvailable()) return
+    // Never release while this Host still owns an active turn on the Thread:
+    // the writer lease is what keeps approvals and turn events routed.
+    if (this.turnOwners.has(threadId)) return
+    // A Remote observer keeps the App Server Thread loaded so live frames
+    // continue to flow; the lock is released when the last observer leaves.
+    if (this.hasSubscriber(threadId)) return
+    const pending = this.releasingThreads.get(threadId)
+    if (pending !== undefined) return pending
+    const release = (async () => {
+      try {
+        const result = await this.callUpstream('thread/unsubscribe', { threadId })
+        this.logger.debug('Codex thread writer released', {
+          threadId: maskId(threadId),
+          status: isRecord(result) && typeof result.status === 'string' ? result.status : 'unknown',
+        })
+      } catch (error) {
+        // notLoaded/notSubscribed and transient App Server states are normal.
+        // The next terminal event or disconnect retries the release.
+        this.logger.debug('Codex thread writer release skipped', {
+          threadId: maskId(threadId),
+          code: errorCode(error),
+        })
+      } finally {
+        this.releasingThreads.delete(threadId)
+      }
+    })()
+    this.releasingThreads.set(threadId, release)
+    return release
+  }
+
+  /** Wait for a pending release of this Thread so a following call cannot race it. */
+  private async awaitThreadRelease(threadId: string): Promise<void> {
+    const pending = this.releasingThreads.get(threadId)
+    if (pending !== undefined) await pending.catch(() => undefined)
   }
 
   async reconfigure(config: ResolvedCodexConfig): Promise<void> {
@@ -425,6 +498,8 @@ export class CodexRemoteDomain {
     this.turnOwners.clear()
     this.permissionPresets.clear()
     this.knownThreadPromises.clear()
+    this.releasingThreads.clear()
+    this.goneThreads.clear()
     this.approvals.clear()
     if (this.approvalExpiryTimer !== undefined) clearTimeout(this.approvalExpiryTimer)
     this.approvalExpiryTimer = undefined
@@ -447,6 +522,8 @@ export class CodexRemoteDomain {
     this.peerDeviceIds.clear()
     this.turnOwners.clear()
     this.permissionPresets.clear()
+    this.releasingThreads.clear()
+    this.goneThreads.clear()
     if (this.approvalExpiryTimer !== undefined) clearTimeout(this.approvalExpiryTimer)
     this.approvalExpiryTimer = undefined
     this.approvals.clear()
@@ -514,6 +591,8 @@ export class CodexRemoteDomain {
     this.unavailableCode = code
     this.turnOwners.clear()
     this.permissionPresets.clear()
+    this.releasingThreads.clear()
+    this.goneThreads.clear()
     this.approvals.clear()
     if (this.approvalExpiryTimer !== undefined) clearTimeout(this.approvalExpiryTimer)
     this.approvalExpiryTimer = undefined
@@ -577,7 +656,10 @@ export class CodexRemoteDomain {
       this.rememberPermission(threadId, message.params)
     }
     if (message.method === 'thread/closed' && threadId !== undefined) this.permissionPresets.delete(threadId)
-    if (message.method === 'turn/completed' && threadId !== undefined) this.turnOwners.delete(threadId)
+    if (message.method === 'turn/completed' && threadId !== undefined) {
+      this.turnOwners.delete(threadId)
+      void this.releaseThreadWriterIfIdle(threadId)
+    }
     if (message.method === 'thread/status/changed' && threadId !== undefined
       && isTerminalThreadStatus(message.params)) {
       // Some App Server failure/interruption paths publish only the terminal
@@ -591,6 +673,7 @@ export class CodexRemoteDomain {
         void this.appServer?.respond(approval.upstreamId, { decision: 'decline' }).catch(() => undefined)
       }
       this.scheduleApprovalExpiry()
+      void this.releaseThreadWriterIfIdle(threadId)
     }
     if (message.method === 'turn/started' && threadId !== undefined) {
       const owner = this.turnOwners.get(threadId)
@@ -731,17 +814,42 @@ export class CodexRemoteDomain {
       result = await this.callUpstream('thread/read', { threadId, includeTurns: false })
     } catch (error) {
       if (!isHistoryReadRecoverable(error)) throw error
-      const listed = await this.findKnownThreadInList(threadId, authority)
-      if (listed === undefined) {
-        throw new RpcError('CODEX_THREAD_NOT_ALLOWED', 'The Codex thread is not available through this Remote Host.')
-      }
-      return { thread: listed, ...(typeof listed.cwd === 'string' && listed.cwd.length > 0 ? { cwd: listed.cwd } : {}) }
+      return this.knownThreadFromListing(threadId, authority, 'read')
     }
     const thread = extractThread(result)
-    if (thread === undefined || thread.id !== threadId || !isThreadAllowedByWorkspaceAuthority(thread, authority)) {
-      throw new RpcError('CODEX_THREAD_NOT_ALLOWED', 'The Codex thread is not available through this Remote Host.')
+    if (thread === undefined || thread.id !== threadId) {
+      return this.knownThreadFromListing(threadId, authority, 'invalid')
+    }
+    if (!isThreadAllowedByWorkspaceAuthority(thread, authority)) {
+      // The App Server listing that surfaced this Thread in clients passed the
+      // same workspace authority filter, but a Thread snapshot read can carry
+      // different metadata (rolled-back/legacy cwd). Keep the listed session
+      // openable instead of leaving a visible row that always fails.
+      return this.knownThreadFromListing(threadId, authority, 'authority')
     }
     return { thread, ...(typeof thread.cwd === 'string' && thread.cwd.length > 0 ? { cwd: thread.cwd } : {}) }
+  }
+
+  /**
+   * Degrade to the bounded `thread/list` row that admitted this Thread when the
+   * dedicated metadata read is unavailable or disagrees with it. The listing
+   * is filtered by the same workspace authority, so this never widens access;
+   * it only keeps a listed conversation from becoming permanently unopenable.
+   */
+  private async knownThreadFromListing(
+    threadId: string,
+    authority: CodexWorkspaceAuthority,
+    stage: string,
+  ): Promise<{ thread: Record<string, unknown>; cwd?: string }> {
+    const listed = await this.findKnownThreadInList(threadId, authority)
+    if (listed === undefined) {
+      throw new RpcError('CODEX_THREAD_NOT_ALLOWED', 'The Codex thread is not available through this Remote Host.')
+    }
+    this.logger.debug('Codex thread metadata degraded from listing', {
+      threadId: maskId(threadId),
+      stage,
+    })
+    return { thread: listed, ...(typeof listed.cwd === 'string' && listed.cwd.length > 0 ? { cwd: listed.cwd } : {}) }
   }
 
   private async readThreadForHistory(connectionId: string, threadId: string): Promise<Record<string, unknown>> {
@@ -987,7 +1095,61 @@ export class CodexRemoteDomain {
       }
       return result
     } catch (error) {
-      throw mapAppServerError(error)
+      const mapped = mapAppServerError(error)
+      if (mapped instanceof RpcError && mapped.code === CODEX_THREAD_GONE) {
+        const threadId = threadIdFromParams(isRecord(params) ? params : {})
+        if (threadId !== undefined) this.goneThreads.add(threadId)
+      }
+      throw mapped
+    }
+  }
+
+  /** Drop Threads the App Server already reported as gone from catalog reads. */
+  private withoutGoneThreads(result: unknown): unknown {
+    if (this.goneThreads.size === 0 || !isRecord(result) || !Array.isArray(result.data)) return result
+    return {
+      ...result,
+      data: result.data.filter(thread => !(isRecord(thread)
+        && typeof thread.id === 'string'
+        && this.goneThreads.has(thread.id))),
+    }
+  }
+
+  /**
+   * `thread/resume` can hit the short window where a previous writer released
+   * the Thread but the App Server has not finished unload. One bounded retry
+   * turns that transient "is closing" failure into a successful resume instead
+   * of a user-visible failed Prompt.
+   */
+  private async callWithClosingRetry(
+    method: string,
+    params: unknown,
+    assertCurrent: () => void,
+  ): Promise<unknown> {
+    const appServer = this.requireAppServer()
+    const callOnce = async (): Promise<unknown> => {
+      const result = await appServer.call(method, params)
+      if (this.closed || this.appServer !== appServer || !this.isAvailable()) {
+        throw new RpcError('CODEX_UNAVAILABLE', 'The Codex App Server changed while handling the request.')
+      }
+      return result
+    }
+    try {
+      return await callOnce()
+    } catch (error) {
+      if (method !== 'thread/resume'
+        || !(error instanceof CodexAppServerError)
+        || error.code !== CODEX_THREAD_CLOSING) {
+        throw mapAppServerError(error)
+      }
+      assertCurrent()
+      await new Promise(resolve => setTimeout(resolve, CODEX_THREAD_CLOSING_RETRY_MS))
+      assertCurrent()
+      try {
+        return await callOnce()
+      } catch (retryError) {
+        throw mapAppServerError(retryError)
+      }
     }
   }
 
@@ -1342,7 +1504,7 @@ function sanitizeThreadList(result: unknown): unknown {
   if (!isRecord(result) || !Array.isArray(result.data)) {
     throw new RpcError('CODEX_INVALID_RESPONSE', 'Codex App Server returned an invalid thread list.')
   }
-  const data = result.data.flatMap(value => {
+  const sanitized = result.data.flatMap(value => {
     if (!isRecord(value) || typeof value.id !== 'string') return []
     return [{
       id: value.id,
@@ -1358,6 +1520,15 @@ function sanitizeThreadList(result: unknown): unknown {
       ...(isRecord(value.status) ? { status: value.status } : {}),
     }]
   })
+  // The App Server can return several rollout snapshots for one Thread id
+  // (for example after a migration). Project one row per id — the newest
+  // snapshot — so clients never render the same conversation twice.
+  const byId = new Map<string, Record<string, unknown>>()
+  for (const thread of sanitized) {
+    const current = byId.get(thread.id as string)
+    if (current === undefined || updatedAtOf(thread) > updatedAtOf(current)) byId.set(thread.id as string, thread)
+  }
+  const data = [...byId.values()]
   return {
     data,
     ...(typeof result.nextCursor === 'string' && result.nextCursor.length > 0 ? { nextCursor: result.nextCursor } : { nextCursor: null }),
@@ -1365,6 +1536,10 @@ function sanitizeThreadList(result: unknown): unknown {
       ? { backwardsCursor: result.backwardsCursor }
       : {}),
   }
+}
+
+function updatedAtOf(thread: Record<string, unknown>): number {
+  return typeof thread.updatedAt === 'number' && Number.isFinite(thread.updatedAt) ? thread.updatedAt : 0
 }
 
 function filterThreadListByWorkspaceAuthority(result: unknown, authority: CodexWorkspaceAuthority): unknown {
@@ -1551,7 +1726,23 @@ function mapAppServerError(error: unknown): Error {
   if (error instanceof RpcError) return error
   if (error instanceof CodexAppServerError) {
     if (error.code === 'CODEX_UPSTREAM_ERROR' && isActiveWriterMessage(error.message)) {
-      return new RpcError('CODEX_THREAD_BUSY', 'The selected CodeX thread is already active in another CodeX client.')
+      return new RpcError(
+        'CODEX_THREAD_BUSY',
+        'The selected CodeX thread is already open in another Codex app. Close that conversation or retry after it exits.',
+        undefined,
+        true,
+      )
+    }
+    if (error.code === CODEX_THREAD_CLOSING) {
+      return new RpcError(
+        'CODEX_THREAD_BUSY',
+        'The selected CodeX thread is still closing after being used by another Codex app. Retry in a moment.',
+        undefined,
+        true,
+      )
+    }
+    if (error.code === CODEX_THREAD_GONE) {
+      return new RpcError(CODEX_THREAD_GONE, CODEX_THREAD_GONE_MESSAGE)
     }
     return new RpcError(error.code, error.message, undefined, error.code === 'CODEX_REQUEST_TIMEOUT')
   }
@@ -1565,7 +1756,8 @@ function errorCode(error: unknown): string {
 
 function isHistoryReadRecoverable(error: unknown): boolean {
   return error instanceof RpcError
-    && ['METHOD_NOT_ALLOWED', 'METHOD_NOT_FOUND', 'CODEX_UPSTREAM_ERROR', 'CODEX_REQUEST_TIMEOUT', 'CODEX_THREAD_BUSY'].includes(error.code)
+    && ['METHOD_NOT_ALLOWED', 'METHOD_NOT_FOUND', 'CODEX_UPSTREAM_ERROR', 'CODEX_REQUEST_TIMEOUT', 'CODEX_THREAD_BUSY',
+      CODEX_THREAD_GONE].includes(error.code)
 }
 
 function historyNextCursor(value: unknown): string | undefined {

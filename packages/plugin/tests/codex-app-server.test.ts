@@ -3,6 +3,11 @@ import { PassThrough } from 'node:stream'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  CODEX_APP_SERVER_ARGS,
+  CODEX_THREAD_CLOSING,
+  CODEX_THREAD_CLOSING_MESSAGE,
+  CODEX_THREAD_GONE,
+  CODEX_THREAD_GONE_MESSAGE,
   CODEX_THREAD_UNMATERIALIZED,
   CODEX_UNMATERIALIZED_THREAD_MESSAGE,
   CodexAppServerClient,
@@ -100,6 +105,43 @@ describe('CodexAppServerClient', () => {
 
     await expect(client.call('turn/start', { threadId: 'redacted' }))
       .rejects.toMatchObject({ message: 'Codex thread already has an active writer.' })
+    await client.close()
+  })
+
+  it('classifies closing and gone Thread transitions for bounded retries', async () => {
+    const fake = fakeProcess()
+    fake.child.stdin.on('data', chunk => {
+      for (const line of String(chunk).trim().split('\n')) {
+        const message = JSON.parse(line) as Record<string, unknown>
+        if (message.method === 'initialize') {
+          fake.stdout.write(`${JSON.stringify({ id: message.id, result: { userAgent: 'codex' } })}\n`)
+        } else if (message.method === 'thread/resume') {
+          fake.stdout.write(`${JSON.stringify({
+            id: message.id,
+            error: { code: -32600, message: 'thread 01a05bd0-8d55-7e23-bc95-97fec98aa8f4 is closing; retry after unload' },
+          })}\n`)
+        } else if (message.method === 'thread/read') {
+          fake.stdout.write(`${JSON.stringify({
+            id: message.id,
+            error: { code: -32600, message: 'thread 01a05bd0-8d55-7e23-bc95-97fec98aa8f4 not found in rollout store' },
+          })}\n`)
+        }
+      }
+    })
+    const client = new CodexAppServerClient('codex', logger(), () => fake.child)
+    await client.start()
+
+    await expect(client.call('thread/resume', { threadId: 'redacted' })).rejects.toMatchObject({
+      code: CODEX_THREAD_CLOSING,
+      message: CODEX_THREAD_CLOSING_MESSAGE,
+    })
+    await expect(client.call('thread/read', { threadId: 'redacted' })).rejects.toMatchObject({
+      code: CODEX_THREAD_GONE,
+      message: CODEX_THREAD_GONE_MESSAGE,
+    })
+    // The Host-owned App Server unloads idle Threads quickly so its
+    // cross-process writer lease is not held for the default 30 minutes.
+    expect(CODEX_APP_SERVER_ARGS).toContain('thread_unload_delay_secs=30')
     await client.close()
   })
 

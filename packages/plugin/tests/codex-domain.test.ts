@@ -1095,8 +1095,136 @@ describe('CodexRemoteDomain', () => {
       params: { threadId: 'allowed-thread', input: [{ type: 'text', text: 'Run tests' }] },
     })).rejects.toMatchObject({
       code: 'CODEX_THREAD_BUSY',
-      message: 'The selected CodeX thread is already active in another CodeX client.',
+      message: 'The selected CodeX thread is already open in another Codex app. Close that conversation or retry after it exits.',
     })
+    await domain.close()
+  })
+
+  it('releases the upstream Thread writer when the last Remote observer leaves an idle Thread', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+    const peer = domain.createPeer({ connectionId: 'connection-1', peerDeviceId: 'peer-1' }, async () => undefined)!
+
+    await peer.openStream({ streamId: 'stream-1', threadId: 'allowed-thread' })
+    await peer.closeStream({ streamId: 'stream-1' })
+    await flush()
+    await flush()
+
+    const releases = app.calls.filter(call => call.method === 'thread/unsubscribe')
+    expect(releases).toHaveLength(1)
+    expect(releases[0]?.params).toEqual({ threadId: 'allowed-thread' })
+
+    // A whole connection going away releases the Threads it observed too.
+    await peer.openStream({ streamId: 'stream-2', threadId: 'allowed-thread' })
+    await peer.closeAll()
+    await flush()
+    await flush()
+    expect(app.calls.filter(call => call.method === 'thread/unsubscribe')).toHaveLength(2)
+    await domain.close()
+  })
+
+  it('keeps the writer lease while another observer or the active turn still owns it', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+    const peerOne = domain.createPeer({ connectionId: 'connection-1', peerDeviceId: 'peer-1' }, async () => undefined)!
+    const peerTwo = domain.createPeer({ connectionId: 'connection-2', peerDeviceId: 'peer-2' }, async () => undefined)!
+    await peerOne.openStream({ streamId: 'stream-1', threadId: 'allowed-thread' })
+    await peerTwo.openStream({ streamId: 'stream-2', threadId: 'allowed-thread' })
+
+    await peerOne.closeStream({ streamId: 'stream-1' })
+    await flush()
+    expect(app.calls.some(call => call.method === 'thread/unsubscribe')).toBe(false)
+
+    await peerOne.call({
+      method: 'turn/start',
+      params: { threadId: 'allowed-thread', input: [{ type: 'text', text: 'Run tests' }] },
+    })
+    await peerTwo.closeStream({ streamId: 'stream-2' })
+    await flush()
+    // The active turn keeps the lease even though the last observer left.
+    expect(app.calls.some(call => call.method === 'thread/unsubscribe')).toBe(false)
+
+    app.emit({
+      kind: 'notification',
+      method: 'turn/completed',
+      params: { threadId: 'allowed-thread', turn: { id: 'turn-1', status: 'completed', items: [] } },
+    })
+    await flush()
+    await flush()
+    // The disconnect-released lease is reclaimed by the App Server's idle
+    // unload policy; the Host still asks for it once the turn settles.
+    expect(app.calls.some(call => call.method === 'thread/unsubscribe')).toBe(true)
+    await peerOne.closeAll()
+    await peerTwo.closeAll()
+    await domain.close()
+  })
+
+  it('deduplicates repeated Thread snapshots in thread/list and keeps the newest row', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    app.duplicateThreadRows = true
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+
+    const result = await domain.call('connection-1', { method: 'thread/list', params: {} }) as { data: Array<Record<string, unknown>> }
+    expect(result.data.map(thread => thread.id)).toEqual(['allowed-thread', 'outside-thread', 'project-only-thread'])
+    const allowed = result.data.find(thread => thread.id === 'allowed-thread')
+    expect(allowed).toMatchObject({ id: 'allowed-thread', updatedAt: 9, cwd: root })
+    await domain.close()
+  })
+
+  it('degrades a listed Thread whose direct metadata read disagrees with workspace authority', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    app.mismatchedThreadRead = true
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+
+    // The read snapshot claims a cwd outside every authority root, but the
+    // thread/list row that surfaced the session is authority-checked. Keep the
+    // listed conversation openable instead of returning "not available".
+    await expect(domain.call('connection-1', {
+      method: 'dsh/sessionHistory',
+      params: { threadId: 'allowed-thread', maxMessages: 10 },
+    })).resolves.toMatchObject({ records: expect.any(Array) })
+    expect(app.calls.filter(call => call.method === 'thread/read').length).toBeGreaterThan(0)
+    await domain.close()
+  })
+
+  it('retries thread/resume once while the App Server is still closing the Thread', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    app.resumeClosingOnce = true
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+
+    await expect(domain.call('connection-1', {
+      method: 'thread/resume',
+      params: { threadId: 'allowed-thread' },
+    })).resolves.toMatchObject({ thread: { id: 'allowed-thread' } })
+    expect(app.calls.filter(call => call.method === 'thread/resume')).toHaveLength(2)
+    await domain.close()
+  })
+
+  it('classifies gone Threads and filters them from later thread/list reads', async () => {
+    const { root } = await directories()
+    const app = new FakeAppServer(root)
+    app.goneThreadRows = true
+    const domain = new CodexRemoteDomain({ enabled: true, binary: 'codex' }, logger(), () => app)
+    await domain.start()
+
+    await expect(domain.call('connection-1', {
+      method: 'dsh/sessionHistory',
+      params: { threadId: 'gone-thread', maxMessages: 10 },
+    })).rejects.toMatchObject({ code: 'CODEX_THREAD_GONE' })
+    const listed = await domain.call('connection-1', { method: 'thread/list', params: {} }) as {
+      data: Array<Record<string, unknown>>
+    }
+    expect(listed.data.some(thread => thread.id === 'gone-thread')).toBe(false)
     await domain.close()
   })
 
@@ -1253,6 +1381,11 @@ class FakeAppServer implements CodexAppServerLike {
   legacyUnmaterializedThread = false
   rejectTurnStartBusy = false
   rejectSettings = false
+  duplicateThreadRows = false
+  mismatchedThreadRead = false
+  goneThreadRows = false
+  resumeClosingOnce = false
+  closingResumeAttempts = 0
   projectListMode: 'normal' | 'empty' | 'unsupported' = 'normal'
 
   constructor(private readonly root: string, private readonly outside = root) {}
@@ -1263,15 +1396,23 @@ class FakeAppServer implements CodexAppServerLike {
   async call(method: string, params: unknown): Promise<unknown> {
     this.calls.push({ method, params })
     if (method === 'account/read') return { account: { type: 'chatgpt', email: 'private@example.com' }, requiresOpenaiAuth: true }
-    if (method === 'thread/list') return {
-      data: [
+    if (method === 'thread/list') {
+      const data: Array<Record<string, unknown>> = [
         { id: 'allowed-thread', projectId: 'allowed-project', cwd: this.root, createdAt: 1, updatedAt: 2, path: 'private rollout path' },
         { id: 'outside-thread', projectId: 'outside-project', cwd: this.outside, createdAt: 1, updatedAt: 2, path: 'private rollout path' },
         { id: 'project-only-thread', projectId: 'allowed-project', createdAt: 1, updatedAt: 2, path: 'private rollout path' },
         { id: 'unprojected-thread', cwd: `${this.root}-unprojected`, createdAt: 1, updatedAt: 2, path: 'private rollout path' },
         { id: 'missing-cwd', createdAt: 1, updatedAt: 2 },
-      ],
-      nextCursor: null,
+      ]
+      if (this.duplicateThreadRows) {
+        // Newer rollout snapshots of the same Thread, as observed in the field.
+        data.unshift({ id: 'allowed-thread', projectId: 'allowed-project', cwd: this.root, createdAt: 1, updatedAt: 5 })
+        data.push({ id: 'allowed-thread', projectId: 'allowed-project', cwd: this.root, createdAt: 1, updatedAt: 9 })
+      }
+      if (this.goneThreadRows) {
+        data.push({ id: 'gone-thread', projectId: 'allowed-project', cwd: this.root, createdAt: 1, updatedAt: 3 })
+      }
+      return { data, nextCursor: null }
     }
     if (method === 'project/list') {
       if (this.projectListMode === 'unsupported') {
@@ -1318,8 +1459,16 @@ class FakeAppServer implements CodexAppServerLike {
     if (method === 'thread/read') {
       const threadId = isRecord(params) ? params.threadId : undefined
       const includeTurns = isRecord(params) && params.includeTurns === true
+      if (threadId === 'gone-thread') {
+        throw new CodexAppServerError('CODEX_THREAD_GONE', 'Codex thread is no longer available.')
+      }
       if (includeTurns && (this.unmaterializedThread || this.legacyUnmaterializedThread)) {
         throw new CodexAppServerError(CODEX_THREAD_UNMATERIALIZED, CODEX_UNMATERIALIZED_THREAD_MESSAGE)
+      }
+      if (!includeTurns && this.mismatchedThreadRead && threadId === 'allowed-thread') {
+        // A stale snapshot whose cwd is outside every authority root, while the
+        // thread/list row for the same id still carries the allowed cwd.
+        return { thread: { id: threadId, cwd: `${this.root}-detached`, turns: [] } }
       }
       const cwd = threadId === 'outside-thread'
         ? this.outside
@@ -1340,6 +1489,9 @@ class FakeAppServer implements CodexAppServerLike {
       } }
     }
     if (method === 'thread/turns/list') {
+      if (isRecord(params) && params.threadId === 'gone-thread') {
+        throw new CodexAppServerError('CODEX_THREAD_GONE', 'Codex thread is no longer available.')
+      }
       if (this.unmaterializedThread) {
         throw new CodexAppServerError(CODEX_THREAD_UNMATERIALIZED, CODEX_UNMATERIALIZED_THREAD_MESSAGE)
       }
@@ -1382,12 +1534,16 @@ class FakeAppServer implements CodexAppServerLike {
     }
     if (method === 'thread/items/list') return { data: [], nextCursor: null, backwardsCursor: null }
     if (method === 'thread/start') return { thread: { id: 'new-thread', cwd: isRecord(params) ? params.cwd : undefined } }
+    if (method === 'thread/resume' && this.resumeClosingOnce && this.closingResumeAttempts++ === 0) {
+      throw new CodexAppServerError('CODEX_THREAD_CLOSING', 'Codex thread is still closing.')
+    }
     if (method === 'thread/resume' && this.resumeRolloutMissing) {
       throw new CodexAppServerError('CODEX_UPSTREAM_ERROR', 'Codex thread state is not persisted yet.')
     }
     if (method === 'thread/resume' && this.rejectResume) {
       throw new CodexAppServerError('CODEX_UPSTREAM_ERROR', 'Codex App Server rejected the request.')
     }
+    if (method === 'thread/unsubscribe') return { status: 'unsubscribed' }
     if (method === 'thread/resume' || method === 'thread/fork' || method === 'thread/unarchive') {
       return { thread: { id: 'allowed-thread', cwd: this.root } }
     }

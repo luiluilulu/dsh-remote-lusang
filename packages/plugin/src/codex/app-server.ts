@@ -8,6 +8,20 @@ const APP_SERVER_START_TIMEOUT_MS = 15_000
 const MAX_APP_SERVER_LINE_BYTES = 288 * 1024 * 1024
 const MAX_STDERR_CAPTURE_BYTES = 4 * 1024
 
+/**
+ * App Server arguments owned by this Host process. The default idle unload
+ * window is 30 minutes, which keeps the cross-process Codex writer lock held
+ * long after a Remote conversation stopped using the Thread; the desktop Codex
+ * app then reports that conversation as open in another application. The
+ * Host now releases its writer lease explicitly (CodexRemoteDomain) and this
+ * shorter window makes the App Server drop the unloaded Thread promptly.
+ */
+export const CODEX_APP_SERVER_ARGS: readonly string[] = Object.freeze([
+  'app-server',
+  '-c',
+  'thread_unload_delay_secs=30',
+])
+
 interface PendingRequest {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
@@ -71,7 +85,7 @@ export class CodexAppServerClient implements CodexAppServerLike {
   constructor(
     private readonly binary: string,
     private readonly logger?: SafeLogger,
-    private readonly spawnAppServer: SpawnCodexAppServer = binary => spawn(binary, ['app-server'], {
+    private readonly spawnAppServer: SpawnCodexAppServer = binary => spawn(binary, [...CODEX_APP_SERVER_ARGS], {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     }),
@@ -299,6 +313,26 @@ export const CODEX_THREAD_UNMATERIALIZED = 'CODEX_THREAD_UNMATERIALIZED'
 /** Safe Remote-facing message for an unmaterialized Thread. */
 export const CODEX_UNMATERIALIZED_THREAD_MESSAGE = 'Codex thread has no turns yet.'
 
+/**
+ * Dedicated error code for a Thread the App Server reports as gone (e.g. its
+ * rollout was removed). Callers must classify it by code so the Remote layer
+ * can stop retrying and offer an explicit unavailable result instead of a
+ * generic upstream failure.
+ */
+export const CODEX_THREAD_GONE = 'CODEX_THREAD_GONE'
+
+/** Safe Remote-facing message for a Thread that no longer exists. */
+export const CODEX_THREAD_GONE_MESSAGE = 'Codex thread is no longer available.'
+
+/**
+ * Dedicated error code for the short upstream transition where a Thread is
+ * still closing and the request only needs one retry.
+ */
+export const CODEX_THREAD_CLOSING = 'CODEX_THREAD_CLOSING'
+
+/** Safe Remote-facing message for a still-closing Thread. */
+export const CODEX_THREAD_CLOSING_MESSAGE = 'Codex thread is still closing.'
+
 function safeUpstreamError(value: unknown): CodexAppServerError {
   if (!isRecord(value) || typeof value.message !== 'string') {
     return new CodexAppServerError('CODEX_UPSTREAM_ERROR', 'Codex App Server rejected the request.')
@@ -308,6 +342,16 @@ function safeUpstreamError(value: unknown): CodexAppServerError {
   const message = value.message.toLowerCase()
   if (message.includes('active writer')) {
     return new CodexAppServerError('CODEX_UPSTREAM_ERROR', 'Codex thread already has an active writer.')
+  }
+  // A Thread can be caught in the short window after another writer released
+  // it but before the App Server finished unloading it. Clients retry once.
+  if (message.includes('is closing')) {
+    return new CodexAppServerError(CODEX_THREAD_CLOSING, CODEX_THREAD_CLOSING_MESSAGE)
+  }
+  if (message.includes('thread not found') || message.includes('thread does not exist')
+    || message.includes('no such thread') || message.includes('not found in rollout')
+    || message.includes('thread is gone')) {
+    return new CodexAppServerError(CODEX_THREAD_GONE, CODEX_THREAD_GONE_MESSAGE)
   }
   if (message.includes('not materialized yet') || message.includes('before first user message')) {
     return new CodexAppServerError(CODEX_THREAD_UNMATERIALIZED, CODEX_UNMATERIALIZED_THREAD_MESSAGE)
