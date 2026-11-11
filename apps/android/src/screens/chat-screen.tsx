@@ -1023,7 +1023,7 @@ export function ChatScreen({
           maxToRenderPerBatch={6}
           updateCellsBatchingPeriod={16}
           windowSize={7}
-          removeClippedSubviews
+          removeClippedSubviews={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           onLayout={onListLayout}

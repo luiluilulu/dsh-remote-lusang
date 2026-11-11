@@ -175,6 +175,24 @@ export const ChatProcessGroup = memo(function ChatProcessGroup({ items, artifact
   return true
 })
 
+/** Bottom-of-card collapse affordance: collapsing never requires scrolling back to the card header. */
+function CollapseBar({ onPress, label }: { onPress: () => void; label?: string }) {
+  const { colors } = useTheme()
+  const styles = useThemedStyles(createStyles)
+  const text = label ?? zhCN.chat.collapseDetails
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      onPress={onPress}
+      style={({ pressed }) => [styles.collapseBar, pressed && styles.reasoningHeaderPressed]}
+    >
+      <ChevronUp size={16} color={colors.muted} />
+      <Text style={styles.collapseText}>{text}</Text>
+    </Pressable>
+  )
+}
+
 export const ChatActivityGroup = memo(function ChatActivityGroup({ items, closed, dense = false, busyAction, onApproval, onQuestion }: {
   items: ChatItem[]
   closed: boolean
@@ -227,14 +245,17 @@ export const ChatActivityGroup = memo(function ChatActivityGroup({ items, closed
         : latestTool.state === 'failed' ? <X size={14} color={colors.muted} /> : <CircleCheck size={14} color={colors.muted} />}
       <Text style={styles.processCurrentText} numberOfLines={2}>{latestTool ? toolDisplayName(latestTool) : labels.thinking.running}{detail ? ` · ${detail}` : ''}</Text>
     </View>}
-    {expanded && <ScrollView ref={body} style={{ maxHeight: Math.min(400, height / 2) }} nestedScrollEnabled
-      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-      onLayout={() => { if (running) body.current?.scrollToEnd({ animated: false }) }}
-      contentContainerStyle={styles.processBody}>
-      {items.map(item => item.kind === 'message' && item.role === 'assistant' && !hasVisibleMessageText(item.text) && !item.images?.length
-        ? <View key={item.id} style={styles.activityReasoning}><NativeMarkdown text={item.reasoning ?? ''} /></View>
-        : <ChatItemView key={item.id} item={item} compact={item.kind === 'tool'} busyAction={busyAction} onApproval={onApproval} onQuestion={onQuestion} />)}
-    </ScrollView>}
+    {expanded && <View style={styles.activityExpandedBody}>
+      <ScrollView ref={body} style={{ maxHeight: Math.min(320, height * 0.4) }} nestedScrollEnabled
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+        onLayout={() => { if (running) body.current?.scrollToEnd({ animated: false }) }}
+        contentContainerStyle={styles.processBody}>
+        {items.map(item => item.kind === 'message' && item.role === 'assistant' && !hasVisibleMessageText(item.text) && !item.images?.length
+          ? <View key={item.id} style={styles.activityReasoning}><NativeMarkdown text={item.reasoning ?? ''} /></View>
+          : <ChatItemView key={item.id} item={item} compact={item.kind === 'tool'} busyAction={busyAction} onApproval={onApproval} onQuestion={onQuestion} />)}
+      </ScrollView>
+      {!pending && <CollapseBar onPress={() => setOpen(false)} />}
+    </View>}
   </View>
 })
 
@@ -425,6 +446,7 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
 function ReasoningDisclosure({ item }: { item: ChatMessage }) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const { height } = useWindowDimensions()
   const [expanded, setExpanded] = useState(false)
   const active = item.streamingPhase === 'reasoning'
   const label = active ? zhCN.chat.reasoningActive : zhCN.chat.reasoning
@@ -447,7 +469,12 @@ function ReasoningDisclosure({ item }: { item: ChatMessage }) {
           ? <ChevronDown size={17} color={colors.muted} />
           : <ChevronRight size={17} color={colors.muted} />}
       </Pressable>
-      {expanded && <View style={styles.reasoningBody}><NativeMarkdown text={item.reasoning ?? ''} /></View>}
+      {expanded && <View style={styles.reasoningBody}>
+        <ScrollView style={{ maxHeight: Math.min(320, height * 0.4) }} nestedScrollEnabled>
+          <NativeMarkdown text={item.reasoning ?? ''} />
+        </ScrollView>
+        <CollapseBar onPress={() => setExpanded(false)} />
+      </View>}
     </View>
   )
 }
@@ -474,6 +501,7 @@ function ToolRow({ item: original, compact }: { item: ToolActivity; compact: boo
   }
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const { height } = useWindowDimensions()
   const [expanded, setExpanded] = useState(false)
   const stateText = item.state === 'running' ? zhCN.status.running : item.state === 'failed' ? zhCN.chat.failed : zhCN.chat.completed
   const detail = processDetail(item)
@@ -511,10 +539,13 @@ function ToolRow({ item: original, compact }: { item: ToolActivity; compact: boo
       {item.images !== undefined && item.images.length > 0 && <ChatImages images={item.images} tool />}
       {expanded && hasDetail && (
         <View style={styles.toolDetails}>
-          {loadingDetail && <Text>{zhCN.comfort.toolLoading}</Text>}
-          {detailError !== undefined && <Pressable accessibilityRole="button" onPress={() => void loadDetail()}><Text>{detailError} · {zhCN.common.retry}</Text></Pressable>}
-          {item.callDetail !== undefined && <ToolDetailView label={zhCN.chat.toolCall} detail={item.callDetail} />}
-          {item.resultDetail !== undefined && <ToolDetailView label={zhCN.chat.toolResult} detail={item.resultDetail} />}
+          <ScrollView style={{ maxHeight: Math.min(320, height * 0.4) }} nestedScrollEnabled>
+            {loadingDetail && <Text>{zhCN.comfort.toolLoading}</Text>}
+            {detailError !== undefined && <Pressable accessibilityRole="button" onPress={() => void loadDetail()}><Text>{detailError} · {zhCN.common.retry}</Text></Pressable>}
+            {item.callDetail !== undefined && <ToolDetailView label={zhCN.chat.toolCall} detail={item.callDetail} />}
+            {item.resultDetail !== undefined && <ToolDetailView label={zhCN.chat.toolResult} detail={item.resultDetail} />}
+          </ScrollView>
+          <CollapseBar onPress={() => setExpanded(false)} label={zhCN.chat.toolCollapse(name)} />
         </View>
       )}
     </View>
