@@ -26,9 +26,22 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
       const session = get().selectedSession
       const text = input.trim()
       if (session === undefined || (text.length === 0 && images.length === 0)) return 'rejected'
-      if (session.backend === 'codex' && (get().connection.phase !== 'connected'
+      // The Codex live stream carries turn events; a Prompt sent while it is
+      // missing would run on the Host but never display a reply. The previous
+      // code returned silently, so the composer restored the draft with no
+      // explanation. Surface an actionable reason instead (chat screen shows
+      // `state.error` for a rejected send) and keep the no-mutation contract.
+      const codexNotReady = session.backend === 'codex' && (get().connection.phase !== 'connected'
         || get().codexReadySessionId !== session.sessionId || runtime.activeCodexStream === undefined
-        || runtime.activeCodexTimeline?.session.nativeId !== codexThreadId(session))) return 'rejected'
+        || runtime.activeCodexTimeline?.session.nativeId !== codexThreadId(session))
+      if (codexNotReady) {
+        set({
+          error: get().connection.phase !== 'connected'
+            ? CODEX_OFFLINE_MESSAGE
+            : CODEX_SESSION_NOT_READY_MESSAGE,
+        })
+        return 'rejected'
+      }
       if ((session.backend === undefined || session.backend === 'harness') && /^\/(?:file|goal|plan|feedback|compact|export)(?:\s|$)/u.test(text)) {
         set({ busyAction: 'command', error: undefined })
         try {
@@ -199,13 +212,18 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
         // "message vanished / reappears after reload" mismatch; timeout/transport
         // errors leave the outcome unknown and must never be judged by timers.
         const unconfirmed = isRpcTimeoutError(error) || isRecoverableTransportError(error)
+        // The Codex writer is an exclusive cross-process lease. When the desktop
+        // Codex app holds it, the Host rejects the Prompt as CODEX_THREAD_BUSY;
+        // show an actionable reason + keep the retryable row instead of a raw
+        // English upstream message.
+        const busyMessage = codexBusyMessage(error)
         set(state => ({
           messages: {
             ...state.messages,
             [session.sessionId]: (state.messages[session.sessionId] ?? []).map(item =>
               item.id === optimistic.id && item.kind === 'message'
                 && item.queuedAdopted !== true && item.sendState !== 'canceled'
-                ? { ...item, sendState: unconfirmed ? 'unconfirmed' : 'failed', sendError: friendlyError(error) }
+                ? { ...item, sendState: unconfirmed ? 'unconfirmed' : 'failed', sendError: busyMessage ?? friendlyError(error) }
                 : item),
           },
           // Only a deterministic failure may claim the agent is idle again; an
@@ -378,4 +396,22 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
       }
     },
   }
+}
+
+// User-facing reasons for the Codex paths that used to fail silently. The
+// locale catalog is generated elsewhere; keep these actionable strings next to
+// the only place that can surface them.
+const CODEX_OFFLINE_MESSAGE = 'Codex 连接尚未就绪，消息未发送，请检查网络后重试。'
+const CODEX_SESSION_NOT_READY_MESSAGE = 'Codex 会话尚未就绪，消息未发送，请重新打开会话或稍后重试。'
+const CODEX_BUSY_MESSAGE = '该会话正被电脑上的 Codex 占用，请关闭电脑端对话或稍后重试。'
+
+/** `CODEX_THREAD_BUSY` from the Host means the desktop Codex app holds the writer lease. */
+function codexBusyMessage(error: unknown): string | undefined {
+  const code = errorCodeOf(error)
+  return code === 'CODEX_THREAD_BUSY' || code === 'CODEX_THREAD_CLOSING' ? CODEX_BUSY_MESSAGE : undefined
+}
+
+function errorCodeOf(error: unknown): string | undefined {
+  if (!isRecord(error)) return undefined
+  return typeof error.code === 'string' ? error.code : undefined
 }

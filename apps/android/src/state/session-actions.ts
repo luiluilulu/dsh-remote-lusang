@@ -40,6 +40,9 @@ import type { SessionAccess } from './session-runtime'
 import { applyFeedback, latestHistoryLifecycle, record, withActiveCodexTurn } from './session-state'
 import type { AppState } from './store-state'
 
+/** Delay before re-opening a conversation whose Codex live stream failed. */
+const CODEX_STREAM_REOPEN_DELAY_MS = 1_500
+
 /** Session actions use the store's single connection/session runtime. */
 export function createSessionActions({ get, set, runtime }: SessionAccess): Pick<AppState,
   'refreshSessionStatus' | 'openSession' | 'forkChatMessage' | 'quoteChatMessage' | 'rateMessage' | 'createSession' | 'forkSession' | 'archiveSession' | 'unarchiveSession' | 'pinSession' | 'unpinSession' | 'renameSession' | 'selectModel' | 'selectPermission' | 'loadAgentPresets' | 'selectAgentPreset' | 'loadOlderHistory'> {
@@ -256,6 +259,9 @@ export function createSessionActions({ get, set, runtime }: SessionAccess): Pick
             }
           })
           let streamClosed = false
+          // One automatic reopen per load attempt: a failed live stream must
+          // not leave the conversation silently stale ("no reply") forever.
+          let codexStreamReopenScheduled = false
           const stream = await client.subscribe(
             threadId,
             frame => { if (current()) runtime.enqueueCodexFrame(loadGeneration, frame) },
@@ -276,6 +282,21 @@ export function createSessionActions({ get, set, runtime }: SessionAccess): Pick
                   : state.selectedSession,
                 ...(reason === 'failed' ? { error: zhCN.runtime.codexUnavailable } : {}),
               }))
+              // A transport flap can close the Codex live stream while the
+              // secure channel is still up. Reopen the conversation once so
+              // the next Prompt is not rejected by the stream-readiness guard
+              // and current-turn events are received again.
+              if (reason === 'peer-disconnected' || codexStreamReopenScheduled) return
+              codexStreamReopenScheduled = true
+              if (get().connection.phase !== 'connected') return
+              const selected = get().selectedSession
+              if (selected?.sessionId !== session.sessionId || selected.backend !== 'codex') return
+              setTimeout(() => {
+                if (!current()) return
+                if (get().connection.phase !== 'connected') return
+                if (get().selectedSession?.sessionId !== session.sessionId) return
+                void get().openSession(selected).catch(() => undefined)
+              }, CODEX_STREAM_REOPEN_DELAY_MS)
             },
           )
           if (!current()) { await stream.close().catch(() => undefined); return }

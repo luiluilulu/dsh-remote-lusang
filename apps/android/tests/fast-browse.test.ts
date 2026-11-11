@@ -221,7 +221,52 @@ describe('fast browsing without changing writer ownership', () => {
     expect(state.codexReadySessionId).toBeUndefined()
     client.request.mockClear()
     expect(await state.sendMessage('stream closed')).toBe('rejected')
+    // A rejected send due to the missing stream must explain itself instead of
+    // silently restoring the draft: the chat screen shows `state.error`.
+    expect(state.error).toBeDefined()
     expect(client.request).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an actionable reason when another Codex app holds the writer lease', async () => {
+    const a = session('a')
+    state.sessions = [a]
+    expect(await state.openSession(a)).toBe(true)
+    client.request.mockImplementation(async (method) => {
+      if (method === 'thread/read') return { thread: thread('a') }
+      if (method === 'thread/resume') return { thread: thread('a') }
+      if (method === 'turn/start') {
+        throw Object.assign(new Error('The selected CodeX thread is already open in another Codex app.'), {
+          code: 'CODEX_THREAD_BUSY',
+        })
+      }
+      return page('a')
+    })
+
+    expect(await state.sendMessage('busy prompt')).toBe('kept')
+    const row = state.messages[a.sessionId]?.find(item => item.kind === 'message' && item.role === 'user')
+    expect(row).toMatchObject({
+      sendState: 'failed',
+      sendError: '该会话正被电脑上的 Codex 占用，请关闭电脑端对话或稍后重试。',
+    })
+  })
+
+  it('reopens the Codex live stream once after a failed close', async () => {
+    vi.useFakeTimers()
+    try {
+      const a = session('a')
+      state.sessions = [a]
+      expect(await state.openSession(a)).toBe(true)
+      expect(client.subscribe).toHaveBeenCalledTimes(1)
+      const onClose = client.subscribe.mock.calls[0]![3] as (reason: string) => void
+      onClose('failed')
+      expect(state.codexReadySessionId).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(1_600)
+      for (let index = 0; index < 12; index += 1) await Promise.resolve()
+      expect(client.subscribe).toHaveBeenCalledTimes(2)
+      expect(state.codexReadySessionId).toBe(a.sessionId)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
 
