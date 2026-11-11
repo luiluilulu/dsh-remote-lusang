@@ -6,6 +6,42 @@ import { chatSections, inboxQueuedItems, inboxRpcIds, mergeReplyReasoning } from
 import type { ChatItem, RemoteSession, TeamMemberSnapshot, TeamTaskSnapshot } from '../../types'
 import { useSessionUiArtifacts } from './use-session-ui-artifacts'
 
+/**
+ * Conversation that owns the agent roster. Subagent children only publish
+ * their own projections, so the team view must be read from the root of the
+ * subagent chain. Forks also carry `parentSessionId` but are not subagents, so
+ * only `origin: 'subagent'` rows continue the walk. A missing ancestor (not in
+ * the loaded catalogue) or a cycle stops at the closest known session, which
+ * still gives the dock a usable roster instead of an empty one.
+ */
+export function resolveRootSession(
+  session: RemoteSession | undefined,
+  sessions: readonly RemoteSession[],
+): RemoteSession | undefined {
+  if (session === undefined) return undefined
+  let current = session
+  const seen = new Set<string>([current.sessionId])
+  while (isSubagentSession(current)) {
+    const parent = sessions.find(item => item.sessionId === current.parentSessionId)
+    if (parent === undefined || seen.has(parent.sessionId)) return current
+    seen.add(parent.sessionId)
+    current = parent
+  }
+  return current
+}
+
+/** Read the `agentTeam` projection, if the session published one. */
+function teamStateFrom(session: RemoteSession | undefined): { members: TeamMemberSnapshot[]; tasks: TeamTaskSnapshot[] } | undefined {
+  const raw = (session?.projections?.values as Record<string, unknown> | undefined)?.agentTeam
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const record = raw as Record<string, unknown>
+  const members = Array.isArray(record.members) ? record.members.filter((entry): entry is TeamMemberSnapshot =>
+    typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).id === 'string') : []
+  const tasks = Array.isArray(record.tasks) ? record.tasks.filter((entry): entry is TeamTaskSnapshot =>
+    typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).id === 'string') : []
+  return { members, tasks }
+}
+
 export function useChatTranscript({ session, sessions, messages, hostId }: { session: RemoteSession | undefined; sessions: RemoteSession[]; messages: ChatItem[]; hostId: string | undefined }) {
   const visibleMessages = useMemo(() => (session?.backend === 'codex' ? mergeReplyReasoning(messages) : messages).filter(item =>
     item.kind !== 'message' || (item.role !== 'system' && !item.context && item.sendState !== 'queued'
@@ -54,23 +90,21 @@ export function useChatTranscript({ session, sessions, messages, hostId }: { ses
     // inbox rows carry the host item id needed for queue actions.
     return [...inboxItems, ...pending]
   }, [inboxProjection, messages])
-  // Fork ancestry does not make a conversation a subagent child.
+  // Subagent children only carry their own projections. Reading the team from
+  // the current session would collapse the dock to 1/1 and drop the other
+  // members as soon as a member conversation is opened, so the roster and the
+  // sibling list are both resolved from the root conversation.
+  const rootSession = useMemo(() => resolveRootSession(session, sessions), [session, sessions])
+  const rosterSessionId = rootSession?.sessionId ?? session?.sessionId
   const childSessions = useMemo(
-    () => sessions.filter(item => isSubagentSession(item) && item.parentSessionId === session?.sessionId),
-    [sessions, session?.sessionId])
+    () => sessions.filter(item => isSubagentSession(item) && item.parentSessionId === rosterSessionId),
+    [sessions, rosterSessionId])
   // Agent team: the `agentTeam` projection carries the durable roster
   // (member name + role description + phase) and the task board (subject +
   // status + owning member). This is the team view — distinct from the
   // subagent child-session list above.
-  const teamState = useMemo(() => {
-    const raw = (session?.projections?.values as Record<string, unknown> | undefined)?.agentTeam
-    if (typeof raw !== 'object' || raw === null) return undefined
-    const record = raw as Record<string, unknown>
-    const members = Array.isArray(record.members) ? record.members.filter((entry): entry is TeamMemberSnapshot =>
-      typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).id === 'string') : []
-    const tasks = Array.isArray(record.tasks) ? record.tasks.filter((entry): entry is TeamTaskSnapshot =>
-      typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).id === 'string') : []
-    return { members, tasks } satisfies { members: TeamMemberSnapshot[]; tasks: TeamTaskSnapshot[] }
-  }, [session?.projections?.values])
-  return { visibleMessages, visibleSections, uiBySection, visibleUiIds, queueItems, childSessions, teamState }
+  const teamState = useMemo(
+    () => teamStateFrom(rootSession) ?? (rootSession?.sessionId === session?.sessionId ? undefined : teamStateFrom(session)),
+    [rootSession, session])
+  return { visibleMessages, visibleSections, uiBySection, visibleUiIds, queueItems, childSessions, teamState, rootSession }
 }

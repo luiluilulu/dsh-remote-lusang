@@ -259,7 +259,7 @@ export const ChatActivityGroup = memo(function ChatActivityGroup({ items, closed
   </View>
 })
 
-export const ChatItemView = memo(function ChatItemView({ item, busyAction, compact, onApproval, onQuestion, artifacts, onSendPrompt }: {
+export const ChatItemView = memo(function ChatItemView({ item, busyAction, compact, onApproval, onQuestion, artifacts, onSendPrompt, resendIds, resendStatus, resendMissingImages }: {
   item: ChatItem
   busyAction?: string
   compact: boolean
@@ -267,6 +267,10 @@ export const ChatItemView = memo(function ChatItemView({ item, busyAction, compa
   onQuestion: (itemId: string, selected: Record<string, string[]>, custom?: Record<string, string>) => Promise<void>
   artifacts?: UiArtifact[]
   onSendPrompt?: (text: string) => Promise<boolean>
+  /** Undelivered rows retried by the one compact row; only the newest row gets them. */
+  resendIds?: string[]
+  resendStatus?: string
+  resendMissingImages?: boolean
 }) {
   if (item.kind === 'approval') return <ApprovalCard item={item} busy={busyAction === `approval:${item.id}`} onRespond={onApproval} />
   if (item.kind === 'question') return <QuestionCard item={item} busy={busyAction === `question:${item.id}`} onRespond={onQuestion} />
@@ -276,44 +280,84 @@ export const ChatItemView = memo(function ChatItemView({ item, busyAction, compa
     && !hasArtifacts
     && !hasVisibleMessageText(item.text) && !item.images?.length
     && hasVisibleMessageText(item.reasoning ?? '')) return <ReasoningDisclosure item={item} />
-  return <MessageBubble item={item} compact={compact} artifacts={artifacts} onSendPrompt={onSendPrompt} />
+  return <MessageBubble item={item} compact={compact} artifacts={artifacts} onSendPrompt={onSendPrompt}
+    resendIds={resendIds} resendStatus={resendStatus} resendMissingImages={resendMissingImages} />
 })
 
-/** Retry affordance for a kept failed/unconfirmed row, with guarded resend. */
-function UserRowResend({ item, status }: { item: ChatMessage; status: string }) {
+/** Compact retry affordance for the conversation's kept failed/unconfirmed batch. */
+function UserRowResend({ ids, status, missingImages }: { ids: string[]; status: string; missingImages: boolean }) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
   const busyAction = useAppStore(state => state.busyAction)
-  const missingImages = (item.images?.length ?? 0) > 0 && (item.promptImages?.length ?? 0) === 0
   const disabled = busyAction !== undefined || missingImages
+  // One short row for the whole batch: a single failure names its status, a batch
+  // leads with the count so the user can tell why one tap resends several rows.
+  const label = missingImages
+    ? zhCN.chat.resendImageMissing
+    : `${ids.length > 1 ? `${ids.length} × ` : ''}${status} · ${zhCN.chat.resend}`
   const retry = () => {
     const state = useAppStore.getState()
-    const backend = state.sessions.find(row => row.sessionId === item.sessionId)?.backend ?? state.selectedSession?.backend
-    const resend = () => { void state.retrySendMessage(item.id) }
-    // Harness dedupes by request rpcId (official hasPromptRequest), so only
-    // the carriers without request ids need the double-execution warning.
-    if (item.sendState === 'unconfirmed' && backend !== undefined && backend !== 'harness') {
+    const selected = state.selectedSession
+    const backend = selected === undefined
+      ? undefined
+      : state.sessions.find(row => row.sessionId === selected.sessionId)?.backend ?? selected.backend
+    const resend = async () => {
+      for (const [index, id] of ids.entries()) {
+        // Harness keeps `send-message` busy until the turn event acknowledges the
+        // prompt, so wait (bounded) for that guard before the next row; only a
+        // real refusal from the store stops the batch.
+        if (index > 0 && !(await waitForResendIdle())) return
+        if (!(await useAppStore.getState().retrySendMessage(id))) return
+      }
+    }
+    // Harness dedupes by request rpcId (official hasPromptRequest), so only the
+    // carriers without request ids need the double-execution warning.
+    const unconfirmed = selected !== undefined && (state.messages[selected.sessionId] ?? []).some(row =>
+      row.kind === 'message' && ids.includes(row.id) && row.sendState === 'unconfirmed')
+    if (unconfirmed && backend !== undefined && backend !== 'harness') {
       Alert.alert(zhCN.chat.sendUnconfirmed, zhCN.chat.resendConfirm, [
         { text: zhCN.common.cancel, style: 'cancel' },
-        { text: zhCN.chat.resend, onPress: resend },
+        { text: zhCN.chat.resend, onPress: () => { void resend() } },
       ])
-    } else resend()
+    } else void resend()
   }
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${status} · ${zhCN.chat.resend}`}
+      accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
+      hitSlop={8}
       onPress={retry}
-      style={({ pressed }) => [styles.resendRow, pressed && !disabled && styles.resendRowPressed, disabled && styles.resendRowDisabled]}
+      style={({ pressed }) => [styles.resendRow, compactResendStyles.row, pressed && !disabled && styles.resendRowPressed, disabled && styles.resendRowDisabled]}
     >
-      <RefreshCw size={13} color={disabled ? colors.muted : colors.danger} />
-      <Text style={[styles.resendText, disabled && styles.resendTextMuted, !disabled && styles.resendTextFailed]}>
-        {missingImages ? zhCN.chat.resendImageMissing : `${status} · ${zhCN.chat.resend}`}
+      <RefreshCw size={12} color={disabled ? colors.muted : colors.danger} />
+      <Text numberOfLines={1} style={[styles.resendText, compactResendStyles.text, disabled && styles.resendTextMuted, !disabled && styles.resendTextFailed]}>
+        {label}
       </Text>
     </Pressable>
   )
+}
+
+/**
+ * The retry row is deliberately shorter than the shared 44 dp `resendRow`: this
+ * conversation keeps exactly one of them at the bottom of the list. Local styles
+ * are used because `chat/styles.ts` is owned by another in-flight change.
+ */
+const compactResendStyles = StyleSheet.create({
+  row: { minHeight: 22, paddingVertical: 2, marginBottom: 2, alignSelf: 'flex-end' },
+  text: { fontSize: 12, lineHeight: 16, flexShrink: 1 },
+})
+
+/** Bounded pause between sequential retries; the store refuses while busy. */
+const RESEND_SETTLE_TIMEOUT_MS = 4_000
+async function waitForResendIdle(): Promise<boolean> {
+  const deadline = Date.now() + RESEND_SETTLE_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (useAppStore.getState().busyAction === undefined) return true
+    await new Promise<void>(resolve => setTimeout(resolve, 50))
+  }
+  return useAppStore.getState().busyAction === undefined
 }
 function HeartbeatMessage({ text, body }: { text: string; body: string }) {
   const [expanded, setExpanded] = useState(false)
@@ -347,13 +391,16 @@ function AssistantMessageCallout({ item }: { item: ChatMessage }) {
   )
 }
 
-function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onSendPrompt }: {
+function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onSendPrompt, resendIds, resendStatus, resendMissingImages }: {
   item: ChatMessage
   compact: boolean
   artifacts?: UiArtifact[]
   editedFiles?: { path: string; name?: string; action?: 'created' | 'edited' }[]
   onFilePress?: (path: string) => void
   onSendPrompt?: (text: string) => Promise<boolean>
+  resendIds?: string[]
+  resendStatus?: string
+  resendMissingImages?: boolean
 }) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
@@ -390,7 +437,6 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
 
   if (user) {
     const undelivered = item.sendState === 'failed' || item.sendState === 'unconfirmed'
-    const status = item.sendError ?? (item.sendState === 'failed' ? zhCN.chat.sendFailed : zhCN.chat.sendUnconfirmed)
     const heartbeatBody = heartbeatMessageBody(item.text, 'user')
     const { quotes, body } = parseMessageQuotes(item.text)
     return <View style={styles.userBlock}>
@@ -416,11 +462,15 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
       </View>
       {item.sendState === 'canceled'
         ? <Text style={styles.canceledText}>{zhCN.chat.sendCanceled}</Text>
-        : undelivered
-          ? <UserRowResend item={item} status={status} />
-          : <MessageActions item={item} />}
-      {/* Failed rows keep their actions: losing copy would be a regression. */}
-      {undelivered && item.sendState !== 'canceled' && <MessageActions item={item} />}
+        : <>
+          {/* One compact retry row for the whole conversation belongs to the
+              newest undelivered row; older failures keep only their actions. */}
+          {undelivered && resendIds !== undefined && resendStatus !== undefined && (
+            <UserRowResend ids={resendIds} status={resendStatus} missingImages={resendMissingImages === true} />
+          )}
+          {/* Failed rows keep their actions: losing copy would be a regression. */}
+          <MessageActions item={item} />
+        </>}
     </View>
   }
 

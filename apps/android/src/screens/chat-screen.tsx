@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics'
-import { ArrowLeft, FileText, ListTree, Menu, MessageSquare, RefreshCw, X } from 'lucide-react-native'
+import { ArrowLeft, FileText, ListTree, Menu, MessageSquare, Pencil, RefreshCw, X } from 'lucide-react-native'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
@@ -31,6 +31,7 @@ import { chatImageConnectionGeneration, requireConnectionRpc, requireSessionTool
 import { type UiArtifact } from '../state/ui-artifacts'
 import type {
   ChatItem,
+  ChatMessage,
   ModelCatalogModel,
   ModelProviderGroup,
   PermissionSelect,
@@ -58,9 +59,12 @@ import {
   type StagedFile
 } from './chat-files'
 import { ChatTrajectory } from './chat-trajectory'
+import { promptImageFromBase64, sessionImageLimits, validatePromptImages } from './chat-images'
 import { ChatActionMenu } from './chat/action-menu'
 import { ChatComposer } from './chat/composer'
 import { ExpandedComposer } from './chat/expanded-composer'
+import { ImageEditor, type ImageEditorExport } from './chat/image-editor'
+import { editImageWithSystemEditor } from './chat/system-image-editor'
 import {
   ChatImages,
   ChatItemView,
@@ -248,6 +252,10 @@ export function ChatScreen({
   }, [setQuotes, composerInputRef])
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([])
   const sessionGenerationRef = useRef(0)
+  // Staged thumbnails open the phone's own image editor first (gallery app: crop,
+  // rotate, filters, markup). Only when no ACTION_EDIT activity is available does
+  // the bundled canvas fallback open. The edited bytes replace that exact slot.
+  const [imageEditorTarget, setImageEditorTarget] = useState<{ image: PromptImage; index: number }>()
   useLayoutEffect(() => {
     let lastSessionId = useAppStore.getState().selectedSession?.sessionId
     return useAppStore.subscribe((state) => {
@@ -256,9 +264,80 @@ export function ChatScreen({
         lastSessionId = currentId
         sessionGenerationRef.current += 1
         setStagedFiles([])
+        // The canvas fallback belongs to the previous conversation.
+        setImageEditorTarget(undefined)
       }
     })
   }, [])
+  const imageEditLimits = session === undefined ? undefined : sessionImageLimits(session)
+  const imageEditorMaxEdge = Math.min(3072, imageEditLimits?.maxImageDimension ?? 3072)
+  const systemEditorBusy = useRef(false)
+  const replaceStagedImage = (index: number, built: PromptImage): string | undefined => {
+    const next = images.map((image, i) => i === index ? built : image)
+    const problem = validatePromptImages(next, imageEditLimits)
+    if (problem !== undefined) return problem
+    setImages(next)
+    return undefined
+  }
+  const editedPromptImage = (info: { uri?: string; base64: string; mediaType: string; width: number; height: number }, template: PromptImage): PromptImage =>
+    promptImageFromBase64({
+      // A system edit lands in a new cache file; the canvas fallback stays in memory.
+      uri: info.uri ?? `data:${info.mediaType};base64,${info.base64}`,
+      base64: info.base64,
+      mimeType: info.mediaType,
+      ...(template.name === undefined ? {} : { name: template.name }),
+      width: info.width,
+      height: info.height,
+    })
+  const openStagedImageEditor = async (image: PromptImage, index: number) => {
+    // expo-intent-launcher rejects concurrent starts; a double tap must not race
+    // the system editor and the bundled fallback.
+    if (systemEditorBusy.current) return
+    systemEditorBusy.current = true
+    try {
+      Keyboard.dismiss()
+      const generation = sessionGenerationRef.current
+      const outcome = await editImageWithSystemEditor({
+        uri: image.uri,
+        mediaType: image.mediaType,
+        base64: image.data,
+        width: image.width,
+        height: image.height,
+      })
+      // The user may have left the conversation while the system editor was open.
+      if (sessionGenerationRef.current !== generation) return
+      if (outcome.kind === 'unavailable') {
+        setImageEditorTarget({ image, index })
+        return
+      }
+      if (outcome.kind !== 'edited') return
+      let built: PromptImage
+      try {
+        built = editedPromptImage(outcome, image)
+      } catch {
+        Alert.alert(strings.chat.imagePickerFailedTitle, strings.chat.imageEditorFailedBody)
+        return
+      }
+      const problem = replaceStagedImage(index, built)
+      if (problem !== undefined) Alert.alert(strings.chat.imageLimitTitle, problem)
+    } finally {
+      systemEditorBusy.current = false
+    }
+  }
+  const saveEditedImage = (exported: ImageEditorExport): string | undefined => {
+    const target = imageEditorTarget
+    if (target === undefined) return strings.chat.imageEditorFailedBody
+    let built: PromptImage
+    try {
+      built = editedPromptImage({ base64: exported.base64, mediaType: 'image/jpeg', width: exported.width, height: exported.height }, target.image)
+    } catch {
+      return strings.chat.imageEditorFailedBody
+    }
+    const problem = replaceStagedImage(target.index, built)
+    if (problem !== undefined) return problem
+    setImageEditorTarget(undefined)
+    return undefined
+  }
   const { canAttachImages, attachmentPicking, pickImages, takePhoto, pickFiles } = useChatAttachments({
     session, memoryKey, images, setImages, stagedFiles, setStagedFiles, sessionGenerationRef,
   })
@@ -304,7 +383,35 @@ export function ChatScreen({
   const [newSessionPending, setNewSessionPending] = useState(false)
   const creatingSessionRef = useRef(false)
   const lastNewSessionTimeRef = useRef(0)
-  const { visibleMessages, visibleSections, uiBySection, visibleUiIds, queueItems, childSessions, teamState } = useChatTranscript({ session, sessions, messages, hostId })
+  const { visibleMessages, visibleSections, uiBySection, visibleUiIds, queueItems, childSessions, teamState, rootSession } = useChatTranscript({ session, sessions, messages, hostId })
+  // A subagent conversation belongs to the root agent's team. The header offers
+  // one tap back to that conversation (hardware back keeps returning to the
+  // immediate parent), and the dock reads the same root, so the roster and the
+  // return target can never disagree.
+  const rootAgentSession = session !== undefined && isSubagentSession(session)
+    ? (rootSession !== undefined && rootSession.sessionId !== session.sessionId
+      ? rootSession
+      : sessions.find(item => item.sessionId === session.parentSessionId))
+    : undefined
+  // Sent-failure affordance: the whole conversation keeps one compact retry row,
+  // rendered only under the newest failed/unconfirmed message. Older failures
+  // keep their message actions but lose the full-width red row that was crowding
+  // the bottom of the list. The ids array is memoised by value so assistant
+  // streaming updates do not invalidate every list cell through `renderChatItem`.
+  const undeliveredMessages = visibleMessages.filter((item): item is ChatMessage =>
+    item.kind === 'message' && (item.sendState === 'failed' || item.sendState === 'unconfirmed'))
+  const latestUndelivered = undeliveredMessages.at(-1)
+  const resendLatestId = latestUndelivered?.id
+  const resendIdsKey = undeliveredMessages.map(item => item.id).join('\u0000')
+  const resendIds = useMemo(() => resendIdsKey.length === 0 ? undefined : resendIdsKey.split('\u0000'), [resendIdsKey])
+  // Keep the live lang binding read here (not inside the memo) so a language
+  // change is reflected on the next render, same as the rest of the screen.
+  const resendStatus = latestUndelivered === undefined
+    ? undefined
+    : latestUndelivered.sendError ?? (latestUndelivered.sendState === 'failed' ? strings.chat.sendFailed : strings.chat.sendUnconfirmed)
+  // A retry that lost its image payloads must not resend as text-only.
+  const resendMissingImages = undeliveredMessages.some(item =>
+    (item.images?.length ?? 0) > 0 && (item.promptImages?.length ?? 0) === 0)
   const panelOpen = composerExpanded || plusMenuOpen || modelPickerOpen || modePickerOpen || permissionPickerOpen
     || workspacePickerOpen || toolPickerOpen || toolsMode !== undefined || trajectory || mentionType !== null
     || promptsPickerOpen || promptsManagerOpen || promptEditing !== null || sessionInfoOpen
@@ -396,10 +503,16 @@ export function ChatScreen({
 
   // Artifact changes must invalidate FlatList cells even when their section is
   // reused (a later turn can patch a card owned by an earlier turn).
-  const renderChatItem = useCallback(({ item }: { item: ChatSection }) => item.kind === 'process'
-    ? <ChatProcessGroup items={item.items} artifacts={uiBySection.get(item.key)?.cards ?? EMPTY_UI_ARTIFACTS} updatedArtifacts={uiBySection.get(item.key)?.pointers ?? EMPTY_UI_ARTIFACTS} availableUiIds={visibleUiIds} busyAction={busy} onApproval={respondApproval} onQuestion={respondQuestion} />
-    : <ChatItemView item={item.item} busyAction={busy} compact={false} onApproval={respondApproval} onQuestion={respondQuestion} />,
-  [busy, respondApproval, respondQuestion, uiBySection, visibleUiIds])
+  const renderChatItem = useCallback(({ item }: { item: ChatSection }) => {
+    if (item.kind === 'process') {
+      return <ChatProcessGroup items={item.items} artifacts={uiBySection.get(item.key)?.cards ?? EMPTY_UI_ARTIFACTS} updatedArtifacts={uiBySection.get(item.key)?.pointers ?? EMPTY_UI_ARTIFACTS} availableUiIds={visibleUiIds} busyAction={busy} onApproval={respondApproval} onQuestion={respondQuestion} />
+    }
+    const resend = item.item.kind === 'message' && item.item.id === resendLatestId
+    return <ChatItemView item={item.item} busyAction={busy} compact={false} onApproval={respondApproval} onQuestion={respondQuestion}
+      resendIds={resend ? resendIds : undefined} resendStatus={resend ? resendStatus : undefined}
+      resendMissingImages={resend ? resendMissingImages : undefined} />
+  }, [busy, respondApproval, respondQuestion, uiBySection, visibleUiIds,
+    resendLatestId, resendIds, resendStatus, resendMissingImages])
 
   // Keep chat's back action at the top of the Android responder stack. The
   // navigator also handles back globally, but a freshly mounted FlatList can
@@ -967,14 +1080,25 @@ export function ChatScreen({
     } else apply()
   }
 
+  // In a subagent conversation the way back to the owning agent is the primary
+  // navigation: the header arrow returns to the root session instead of only
+  // opening the drawer, and the drawer stays reachable with the existing
+  // edge-swipe. Tablet split keeps its sidebar, so the root entry is a
+  // breadcrumb subtitle there instead.
   const header = <>
       <TopBar
         title={sessionTitle(session)}
         onTitlePress={() => { Keyboard.dismiss(); setMentionType(null); setSessionInfoOpen(true) }}
         titleLines={1}
-        onBack={tabletSplit ? undefined : trajectory ? handleBack : openSessionsDrawer}
-        backIcon={trajectory ? ArrowLeft : Menu}
-        backLabel={trajectory ? strings.common.back : strings.chat.openHostSessions}
+        onBack={tabletSplit ? undefined : trajectory ? handleBack : rootAgentSession !== undefined ? () => { Keyboard.dismiss(); void openSession(rootAgentSession) } : openSessionsDrawer}
+        backIcon={trajectory ? ArrowLeft : rootAgentSession !== undefined ? ArrowLeft : Menu}
+        backLabel={trajectory ? strings.common.back : rootAgentSession !== undefined ? strings.chat.backToMainSession : strings.chat.openHostSessions}
+        subtitle={tabletSplit && !trajectory && rootAgentSession !== undefined
+          ? `${strings.chat.backToMainSession} · ${sessionTitle(rootAgentSession)}`
+          : undefined}
+        onSubtitlePress={tabletSplit && !trajectory && rootAgentSession !== undefined
+          ? () => { Keyboard.dismiss(); void openSession(rootAgentSession) }
+          : undefined}
         action={<>
           <IconButton label={trajectory ? strings.trajectory.close : strings.trajectory.open}
             icon={trajectory ? MessageSquare : ListTree} dense tint={trajectory ? colors.primary : undefined}
@@ -1088,8 +1212,18 @@ export function ChatScreen({
         {images.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.imageTray}>
             {images.map((image, index) => (
-              <View key={`${image.uri}:${index}`} style={styles.imagePreviewWrap}>
-                <Image source={{ uri: image.uri }} style={styles.imagePreview} resizeMode="cover" />
+              <View key={`${index}:${image.bytes}`} style={styles.imagePreviewWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={strings.chat.editImage(image.name ?? `${index + 1}`)}
+                  onPress={() => void openStagedImageEditor(image, index)}
+                  style={styles.imagePreviewButton}
+                >
+                  <Image source={{ uri: image.uri }} style={styles.imagePreview} resizeMode="cover" />
+                  <View style={styles.imageEditBadge}>
+                    <Pencil size={11} color={colors.white} />
+                  </View>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={strings.chat.removeImage(image.name ?? `${index + 1}`)}
@@ -1290,6 +1424,15 @@ export function ChatScreen({
           await createSession(currentWorkspace?.workspaceId)
         }}
       />
+      {imageEditorTarget !== undefined && (
+        <ImageEditor
+          key={`${imageEditorTarget.index}:${imageEditorTarget.image.bytes}`}
+          source={imageEditorTarget.image}
+          maxEdge={imageEditorMaxEdge}
+          onCancel={() => setImageEditorTarget(undefined)}
+          onSave={saveEditedImage}
+        />
+      )}
     </KeyboardInset></MarkdownLinkProvider></ChatImageProvider>
   )
 }
