@@ -1302,12 +1302,21 @@ function HomeMenuRow({ icon: Icon, label, subtitle, onPress, disabled = false, l
 }
 
 function isNewerVersion(latest: string, current: string): boolean {
-  const parse = (value: string): number[] => value.split('.').map(Number)
-  const parseable = (parts: number[]) => parts.length > 0 && parts.every(part => Number.isFinite(part))
-  const a = parse(latest)
-  const b = parse(current)
-  if (!parseable(a)) return false
-  if (!parseable(b)) return true // installed version is unknown; assume an update is available
+  // Upstream releases use plain numeric versions (0.6.4). This fork reports a
+  // suffixed build (0.6.4-own.5) so it stays recognisable on the device; the
+  // suffix must not count as an older or unknown version, otherwise the
+  // upstream release banner appears on every launch.
+  const core = (value: string): number[] | null => {
+    const match = /^\s*v?(\d+(?:\.\d+)*)/i.exec(value)
+    const raw = match?.[1]
+    if (raw === undefined) return null
+    const parts = raw.split('.').map(Number)
+    return parts.length > 0 && parts.every(part => Number.isFinite(part)) ? parts : null
+  }
+  const a = core(latest)
+  const b = core(current)
+  if (a === null) return false
+  if (b === null) return true // installed version is unknown; assume an update is available
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
     const x = a[i] ?? 0
     const y = b[i] ?? 0
