@@ -1150,6 +1150,12 @@ export class CodexRemoteDomain {
       method: 'turn/completed',
       params: { threadId, turn },
     })))
+    // The turn owner is gone; if no Remote connection observes the Thread any
+    // more (the phone left the conversation but the carrier is still up), the
+    // watchdog must release the cross-process writer lease too, exactly like a
+    // normal turn/completed does, or desktop Codex keeps reporting the Thread
+    // as open in another application until the connection drops.
+    await this.releaseThreadWriterIfIdle(threadId)
   }
 
   private requireAppServer(): CodexAppServerLike {

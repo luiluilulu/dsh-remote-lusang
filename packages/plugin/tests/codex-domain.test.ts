@@ -994,6 +994,13 @@ describe('CodexRemoteDomain', () => {
       method: 'turn/start',
       params: { threadId: 'allowed-thread', input: [{ type: 'text', text: 'Retry after silence' }] },
     })).resolves.toMatchObject({ turn: { id: 'turn-1' } })
+    // The observer stream above kept the writer lease alive during the first
+    // silent turn. With the observer gone, the next silent turn must release the
+    // lease as well instead of waiting for the connection to drop (own.9).
+    owner.closeStream({ streamId: 'stream-1' })
+    await vi.waitFor(() => {
+      expect(app.calls.some(call => call.method === 'thread/unsubscribe')).toBe(true)
+    })
     await domain.close()
   })
 
