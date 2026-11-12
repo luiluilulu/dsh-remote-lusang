@@ -43,9 +43,10 @@ describe('fork update channel', () => {
     expect(api[0]).toBe('https://api.github.com/repos/owner/repo/releases/latest')
     expect(api[1]).toContain('gh-proxy.com/')
     const downloads = downloadUrls('https://github.com/owner/repo/releases/download/v1/app.apk')
-    expect(downloads[0]).toBe('https://github.com/owner/repo/releases/download/v1/app.apk')
-    expect(downloads[1]).toContain('gh-proxy.com/')
-    expect(downloads[2]).toContain('ghfast.top/')
+    // Mirrors go first: GitHub's asset host is the unreliable hop on mobile data.
+    expect(downloads[0]).toContain('gh-proxy.com/')
+    expect(downloads[1]).toContain('ghfast.top/')
+    expect(downloads[2]).toBe('https://github.com/owner/repo/releases/download/v1/app.apk')
   })
 
   it('resolves the release and its apk asset across blocked mirrors', async () => {

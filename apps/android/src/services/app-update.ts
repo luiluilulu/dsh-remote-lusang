@@ -25,9 +25,13 @@ export function releaseApiUrls(repo: string = UPDATE_REPO): string[] {
   return [official, `https://gh-proxy.com/${official}`]
 }
 
-/** Download endpoints for one asset URL, primary first. */
+/** Download endpoints for one asset URL, mirrors first. */
 export function downloadUrls(url: string): string[] {
-  return [url, `https://gh-proxy.com/${url}`, `https://ghfast.top/${url}`]
+  // GitHub's asset host is frequently unreachable on Chinese mobile networks
+  // while release *metadata* over api.github.com still works. A large APK would
+  // otherwise hang on the dead direct attempt, so try the public mirrors first
+  // and keep the canonical GitHub URL as the last resort.
+  return [`https://gh-proxy.com/${url}`, `https://ghfast.top/${url}`, url]
 }
 
 export type LatestRelease = {
