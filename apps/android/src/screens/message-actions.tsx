@@ -152,9 +152,14 @@ export function MessageActions({ item }: { item: ChatMessage }) {
   const backend = session?.backend
   const isDeepSeekHarness = backend === undefined || backend === 'harness'
   const harness = session !== undefined && isDeepSeekHarness
-  // Only delivered Harness messages have an official event prefix to fork.
+  // Session fork is a Harness Host capability; the other backends (Codex/ACP)
+  // have no `session/fork` in their data plane. A message is a valid fork
+  // boundary only when it carries the durable event seq (`nativeSeq`) the
+  // official fork treats as an inclusive prefix. Optimistic/pending rows have no
+  // seq yet, so they only show once a delivery echo arrived.
   const pending = item.sendState !== undefined
-  const supportsBranch = harness && item.nativeSeq !== undefined && Number.isSafeInteger(item.nativeSeq) && item.nativeSeq >= 0
+  const durableSeq = Number.isSafeInteger(item.nativeSeq) && (item.nativeSeq ?? -1) >= 0
+  const branchAvailable = harness && durableSeq
   const time = messageTime(item)
   const fork = useAppStore(state => state.forkChatMessage)
   const [copied, setCopied] = useState(false)
@@ -194,13 +199,33 @@ export function MessageActions({ item }: { item: ChatMessage }) {
       .catch(report)
   }
 
-  const branch = async () => {
-    if (!supportsBranch) return
+  const branch = () => {
+    // PC parity: the branch control stays visible even when it cannot run, so the
+    // capability does not silently disappear. Unsupported backends (Codex/ACP)
+    // and messages without a durable boundary explain themselves on tap.
+    if (!branchAvailable) {
+      Alert.alert(strings.messageActions.branch, strings.messageActions.unavailable)
+      return
+    }
     Alert.alert(strings.messageActions.branch, undefined, [
       { text: strings.common.cancel, style: 'cancel' },
       { text: strings.messageActions.branch, onPress: () => { void fork(item).then(ok => { if (!ok) report() }) } },
     ])
   }
+
+  const branchAction = !pending && (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={branchAvailable ? strings.messageActions.branch : `${strings.messageActions.branch}，${strings.messageActions.unavailable}`}
+      accessibilityState={{ disabled: branchAvailable && disabled }}
+      disabled={branchAvailable && disabled}
+      hitSlop={8}
+      style={[styles.actionBtn, !branchAvailable && styles.branchUnavailable]}
+      onPress={branch}
+    >
+      <IconBranchOutline size={14} color={colors.muted} />
+    </Pressable>
+  )
 
   const user = item.role === 'user'
 
@@ -224,6 +249,7 @@ export function MessageActions({ item }: { item: ChatMessage }) {
             )}
           </Pressable>
         </Animated.View>
+        {branchAction}
       </View>
     )
   }
@@ -250,19 +276,7 @@ export function MessageActions({ item }: { item: ChatMessage }) {
             )}
           </Pressable>
         </Animated.View>
-        {!pending && supportsBranch && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={strings.messageActions.branch}
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            hitSlop={8}
-            style={styles.actionBtn}
-            onPress={() => void branch()}
-          >
-            <IconBranchOutline size={14} color={colors.muted} />
-          </Pressable>
-        )}
+        {branchAction}
         {!pending && isDeepSeekHarness && item.usage !== undefined && (
           <Pressable
             accessibilityRole="button"
@@ -299,6 +313,9 @@ export function MessageActions({ item }: { item: ChatMessage }) {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
   userRow: { justifyContent: 'flex-end', gap: 8, paddingTop: 4 },
+  // Branch stays discoverable but visibly inactive when this backend/message
+  // cannot fork; tapping explains why instead of the entry silently vanishing.
+  branchUnavailable: { opacity: 0.35 },
   assistantRow: {
     flexDirection: 'row',
     alignItems: 'center',
