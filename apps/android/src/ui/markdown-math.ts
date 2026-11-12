@@ -21,6 +21,7 @@ export function installMath(parser: MarkdownIt): void {
     if (silent) return true
     const token = state.push('math_block', 'math', 0)
     token.content = content
+    token.markup = open
     token.map = [start, line + 1]
     state.line = line + 1
     return true
@@ -28,23 +29,30 @@ export function installMath(parser: MarkdownIt): void {
 
   parser.inline.ruler.before('escape', 'math_inline', (state, silent) => {
     const start = state.pos
-    const open = state.src.startsWith('\\(', start) ? '\\(' : state.src[start] === '$' && state.src[start + 1] !== '$' && state.src[start - 1] !== '$' ? '$' : undefined
+    const src = state.src
+    // `\[...\]` and `$$...$$` also appear inline (the model often puts display
+    // delimiters mid-sentence); render those in the text flow as inline math.
+    const open: '\\(' | '\\[' | '$$' | '$' | undefined = src.startsWith('\\(', start) ? '\\('
+      : src.startsWith('\\[', start) ? '\\['
+        : src.startsWith('$$', start) ? '$$'
+          : src[start] === '$' && src[start + 1] !== '$' && src[start - 1] !== '$' ? '$'
+            : undefined
     if (!open) return false
     const from = start + open.length
-    if (open === '$' && /\s/u.test(state.src[from] ?? ' ')) return false
-    const close = open === '$' ? '$' : '\\)'
+    if (open === '$' && /\s/u.test(src[from] ?? ' ')) return false
+    const close = open === '\\(' ? '\\)' : open === '\\[' ? '\\]' : open === '$$' ? '$$' : '$'
     let end = from
-    while ((end = state.src.indexOf(close, end)) >= 0) {
+    while ((end = src.indexOf(close, end)) >= 0) {
       let slashes = 0
-      for (let i = end - 1; i >= from && state.src[i] === '\\'; i -= 1) slashes += 1
+      for (let i = end - 1; i >= from && src[i] === '\\'; i -= 1) slashes += 1
       if (slashes % 2 === 0) break
       end += close.length
     }
-    if (end <= from || end >= state.posMax || state.src.slice(from, end).includes('\n')) return false
-    if (open === '$' && (/\s/u.test(state.src[end - 1]!) || /[\d$]/u.test(state.src[end + 1] ?? ''))) return false
+    if (end <= from || end >= state.posMax || src.slice(from, end).includes('\n')) return false
+    if (open === '$' && (/\s/u.test(src[end - 1]!) || /[\d$]/u.test(src[end + 1] ?? ''))) return false
     if (!silent) {
       const token = state.push('math_inline', 'math', 0)
-      token.content = state.src.slice(from, end)
+      token.content = src.slice(from, end)
       token.markup = open
     }
     state.pos = end + close.length

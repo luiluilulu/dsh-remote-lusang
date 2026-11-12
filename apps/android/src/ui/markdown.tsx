@@ -272,7 +272,7 @@ function extractBlockText(node: MarkdownNode): string {
 
 function renderBlock(node: MarkdownNode, styles: MarkdownStyles, colors: ThemeColors, onLinkPress?: MarkdownLinkHandler): ReactNode {
   const { token, key, children } = node
-  if (token.type === 'math_block') return <MathFormula key={key} source={token.content} display />
+  if (token.type === 'math_block') return <MathFormula key={key} source={token.content} markup={token.markup} display />
   if (token.type === 'paragraph_open') {
     return <Text key={key} selectable style={styles.paragraph}>{renderInlineChildren(children, styles, colors, onLinkPress)}</Text>
   }
@@ -399,7 +399,7 @@ function renderInline(tokens: Token[], styles: MarkdownStyles, prefix: string, o
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!
     const key = `${prefix}:${index}`
-    if (token.type === 'math_inline') output.push(<MathFormula key={key} source={token.content} />)
+    if (token.type === 'math_inline') output.push(<MathFormula key={key} source={token.content} markup={token.markup} />)
     else if (token.type === 'text') output.push(token.content)
     else if (token.type === 'softbreak' || token.type === 'hardbreak') output.push('\n')
     else if (token.type === 'code_inline') {

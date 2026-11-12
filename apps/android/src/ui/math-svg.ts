@@ -70,6 +70,45 @@ export function preprocessTeX(source: string): string {
   return out.trim()
 }
 
+/** Attributes kept on MathJax `<text>` fallback nodes (CJK/emoji glyphs). */
+const TEXT_ATTRIBUTE_WHITELIST = new Set([
+  'x', 'y', 'dx', 'dy', 'transform', 'font-size', 'font-family', 'font-weight',
+  'font-style', 'text-anchor', 'opacity', 'letter-spacing',
+])
+
+/** Generated TeX output must never carry interactive/embedded elements. */
+const FORBIDDEN_SVG_ELEMENT = /<(?:script|style|foreignObject|iframe|image|a|use|animate|set)\b/iu
+const EVENT_ATTRIBUTE = /\son[a-z]+\s*=/iu
+
+function escapeTextContent(content: string): string {
+  return content
+    .replace(/&(?!(?:#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+}
+
+/**
+ * MathJax emits `<text>` for glyphs its bundled fonts cannot convert to paths
+ * (CJK, emoji). Keeping them is what makes `\text{或}` render at all, but the
+ * node is rebuilt from a whitelist: known attributes only, no event handlers,
+ * numeric font sizes and XML-escaped content. An explicit `fill` keeps the
+ * glyph visible in dark mode where the parent `currentColor` would not reach it.
+ */
+function sanitizeTextNodes(svg: string): string {
+  return svg.replace(/<text\b([^>]*)>([\s\S]*?)<\/text>/gu, (_match, rawAttributes: string, rawContent: string) => {
+    const attributes: string[] = []
+    for (const match of rawAttributes.matchAll(/([a-zA-Z_:][\w:.-]*)\s*=\s*"([^"]*)"/gu)) {
+      const name = match[1]!
+      const value = match[2]!
+      if (!TEXT_ATTRIBUTE_WHITELIST.has(name) || EVENT_ATTRIBUTE.test(value)) continue
+      const normalized = name === 'font-size' ? value.replace(/[a-z%]+$/iu, '') : value
+      attributes.push(`${name}="${normalized.replace(/"/gu, '')}"`)
+    }
+    if (!attributes.some(attribute => attribute.startsWith('fill='))) attributes.push('fill="currentColor"')
+    return `<text ${attributes.join(' ')}>${escapeTextContent(rawContent)}</text>`
+  })
+}
+
 /** Local TeX → paths only. No HTML, URL, extension loader or shared user macros. */
 export function renderMathSvg(source: string, display: boolean): MathSvg | undefined {
   if (source.length > 4096) return undefined
@@ -78,8 +117,10 @@ export function renderMathSvg(source: string, display: boolean): MathSvg | undef
     const document = mathjax.document('', { InputJax: tex, OutputJax: new SVG({ fontCache: 'none' }) })
     const node = document.convert(preprocessTeX(source), { display })
     const xml = adaptor.outerHTML(node)
-    if (xml.includes('data-mjx-error') || xml.includes('<text')) return undefined
-    const svg = xml.slice(xml.indexOf('<svg'), xml.lastIndexOf('</svg>') + 6)
+    if (xml.includes('data-mjx-error')) return undefined
+    let svg = xml.slice(xml.indexOf('<svg'), xml.lastIndexOf('</svg>') + 6)
+    if (!svg.startsWith('<svg') || FORBIDDEN_SVG_ELEMENT.test(svg) || EVENT_ATTRIBUTE.test(svg)) return undefined
+    if (svg.includes('<text')) svg = sanitizeTextNodes(svg)
     const viewBox = /viewBox="([^"]+)"/u.exec(svg)?.[1]?.split(/\s+/u).map(Number)
     if (!viewBox || viewBox.length !== 4) return undefined
     // MathJax's path coordinates use 1000 units per em.
