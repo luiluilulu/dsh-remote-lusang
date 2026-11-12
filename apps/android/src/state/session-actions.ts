@@ -45,9 +45,18 @@ const CODEX_STREAM_REOPEN_DELAY_MS = 1_500
 
 /** Session actions use the store's single connection/session runtime. */
 export function createSessionActions({ get, set, runtime }: SessionAccess): Pick<AppState,
-  'refreshSessionStatus' | 'openSession' | 'forkChatMessage' | 'quoteChatMessage' | 'rateMessage' | 'createSession' | 'forkSession' | 'archiveSession' | 'unarchiveSession' | 'pinSession' | 'unpinSession' | 'renameSession' | 'selectModel' | 'selectPermission' | 'loadAgentPresets' | 'selectAgentPreset' | 'loadOlderHistory'> {
+  'refreshSessionStatus' | 'openSession' | 'forkChatMessage' | 'quoteChatMessage' | 'rateMessage' | 'createSession' | 'forkSession' | 'archiveSession' | 'unarchiveSession' | 'pinSession' | 'unpinSession' | 'renameSession' | 'selectModel' | 'selectPermission' | 'loadAgentPresets' | 'selectAgentPreset' | 'loadOlderHistory' | 'releaseCodexLiveStream' | 'resumeCodexLiveStream'> {
   const isHarnessBackend = (backend?: RemoteSession['backend']) =>
     (backend ?? 'harness') === 'harness'
+
+  /**
+   * ChatScreen lifecycle: a Codex live subscription is only kept while its
+   * conversation is actually on screen. Suspending keeps the local timeline so the
+   * same conversation can resume without re-reading history, and closing the remote
+   * stream is what lets the Host release the thread writer lock once the turn is idle.
+   */
+  let codexStreamSuspended = false
+  let codexResumeFlight: Promise<void> | undefined
 
   const isHarnessTarget = (sessionId: string, backend?: RemoteSession['backend']) => {
     const target = get().sessions.find(item => item.sessionId === sessionId)
@@ -458,6 +467,95 @@ export function createSessionActions({ get, set, runtime }: SessionAccess): Pick
         set({ busyAction: undefined, error: friendlyError(error) })
         return false
       }
+    },
+
+    releaseCodexLiveStream() {
+      const session = get().selectedSession
+      if (session?.backend !== 'codex') return
+      const stream = runtime.activeCodexStream
+      // A brand-new Codex conversation has no live subscription yet: there is nothing
+      // to suspend (and no Host writer lock to release), so leave it untouched.
+      if (stream === undefined) return
+      codexStreamSuspended = true
+      // Keep activeCodexTimeline so returning to this conversation resumes it without
+      // a history reload; the remote close is what releases the Host writer lock.
+      runtime.activeCodexStream = undefined
+      set({ codexReadySessionId: undefined })
+      void stream.close().catch(() => undefined)
+    },
+
+    async resumeCodexLiveStream() {
+      // A leave/return cycle can begin while an earlier resume is still in flight.
+      // Wait for it instead of returning early so the newest return re-subscribes too.
+      if (codexResumeFlight !== undefined) await codexResumeFlight
+      // Only restore a subscription that was actually suspended: a brand-new Codex
+      // conversation has no live stream yet (the first prompt starts it normally).
+      if (!codexStreamSuspended && runtime.activeCodexTimeline === undefined) return
+      codexStreamSuspended = false
+      const flight = (async () => {
+        const session = get().selectedSession
+        if (session?.backend !== 'codex') return
+        if (get().connection.phase !== 'connected' || get().codexAvailable === false) return
+        if (runtime.activeCodexStream !== undefined) return
+        // A session load in flight already owns the subscription (and will set it up).
+        if (get().busyAction?.startsWith('session:')) return
+        const threadId = codexThreadId(session)
+        const generation = runtime.sessionLoadGeneration
+        const current = () => !codexStreamSuspended
+          && generation === runtime.sessionLoadGeneration
+          && get().selectedSession?.sessionId === session.sessionId
+          && get().connection.phase === 'connected'
+        const client = runtime.connection.requireCodex()
+        try {
+          // Catch up on anything produced while the subscription was suspended.
+          const [read, history] = await Promise.all([
+            readCodexSession(client, threadId, codexPermissionPreset(session)),
+            readCodexHistoryPage(client, threadId, undefined, 16),
+          ])
+          if (!current()) return
+          const timeline = createCodexTimelineState({ ...read.thread, turns: [] })
+          if (timeline === undefined) return
+          runtime.activeCodexTimeline = withActiveCodexTurn(timeline, history.activeTurnId)
+          const items = foldHistory(history.events, session.sessionId, true)
+          const running = history.activeTurnId !== undefined
+          set(state => ({
+            messages: {
+              ...state.messages,
+              [session.sessionId]: mergeHistoryAndLive(items, state.messages[session.sessionId] ?? []),
+            },
+            sessions: state.sessions.map(item => item.sessionId === session.sessionId ? { ...item, running } : item),
+            selectedSession: state.selectedSession?.sessionId === session.sessionId
+              ? { ...state.selectedSession, running }
+              : state.selectedSession,
+          }))
+          const stream = await client.subscribe(
+            threadId,
+            frame => { if (current()) runtime.enqueueCodexFrame(generation, frame) },
+            undefined,
+            reason => {
+              if (!current()) return
+              if (runtime.activeCodexTimeline?.session.nativeId !== threadId) return
+              runtime.activeCodexStream = undefined
+              runtime.activeCodexTimeline = undefined
+              set({ codexReadySessionId: undefined, ...(reason === 'failed' ? { error: zhCN.runtime.codexUnavailable } : {}) })
+            },
+          )
+          // Leaving the conversation again before the subscribe ACK wins: drop it
+          // instead of leaking a second remote subscription (and its Host lock).
+          if (!current() || codexStreamSuspended) { await stream.close().catch(() => undefined); return }
+          if (runtime.activeCodexStream !== undefined) { await stream.close().catch(() => undefined); return }
+          runtime.activeCodexStream = stream
+          set({ codexReadySessionId: session.sessionId })
+        } catch {
+          // Never leave a resumed conversation silently stale: fall back to the
+          // normal open path, which re-reads history and re-subscribes.
+          if (get().selectedSession?.sessionId === session.sessionId && get().connection.phase === 'connected') {
+            void get().openSession(session).catch(() => undefined)
+          }
+        }
+      })()
+      codexResumeFlight = flight.finally(() => { codexResumeFlight = undefined })
+      return codexResumeFlight
     },
 
     async forkChatMessage(message) {

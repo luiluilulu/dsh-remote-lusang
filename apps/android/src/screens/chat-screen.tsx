@@ -5,6 +5,7 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Alert,
+  AppState,
   DeviceEventEmitter,
   FlatList,
   Image,
@@ -444,6 +445,51 @@ export function ChatScreen({
     setDrawerSwipeUnlocked(true)
     setSessionsOpen(true)
   }, [setMentionType])
+
+  // A Codex live subscription is only kept while its conversation is actually on
+  // screen. Opening the single-pane session list drops it so the Host can release the
+  // thread writer lock once idle; closing the list resumes it for the same conversation.
+  // Tablet split keeps the conversation visible, so it never suspends here.
+  const sessionsOpenRef = useRef(sessionsOpen)
+  useEffect(() => {
+    const wasOpen = sessionsOpenRef.current
+    sessionsOpenRef.current = sessionsOpen
+    if (tabletSplit || sessionsOpen === wasOpen) return
+    if (useAppStore.getState().selectedSession?.backend !== 'codex') return
+    if (sessionsOpen) useAppStore.getState().releaseCodexLiveStream()
+    else void useAppStore.getState().resumeCodexLiveStream()
+  }, [sessionsOpen, tabletSplit])
+
+  // Backgrounding the app also leaves the conversation. A short grace period keeps the
+  // stream alive across camera/gallery activities that briefly background the app
+  // while composing; a real background releases the Codex subscription, and returning
+  // to the foreground resumes it. Unmounting the screen releases it immediately.
+  useEffect(() => {
+    let backgroundTimer: ReturnType<typeof setTimeout> | undefined
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'background' || state === 'inactive') {
+        if (backgroundTimer !== undefined) return
+        backgroundTimer = setTimeout(() => {
+          backgroundTimer = undefined
+          if (AppState.currentState === 'active') return
+          useAppStore.getState().releaseCodexLiveStream()
+        }, 1500)
+        return
+      }
+      if (state !== 'active') return
+      if (backgroundTimer !== undefined) {
+        clearTimeout(backgroundTimer)
+        backgroundTimer = undefined
+        return
+      }
+      void useAppStore.getState().resumeCodexLiveStream()
+    })
+    return () => {
+      subscription.remove()
+      if (backgroundTimer !== undefined) clearTimeout(backgroundTimer)
+      useAppStore.getState().releaseCodexLiveStream()
+    }
+  }, [])
 
   // Swipe right gesture to open sessions drawer with haptic feedback
   const edgeSwipeResponder = useMemo(
