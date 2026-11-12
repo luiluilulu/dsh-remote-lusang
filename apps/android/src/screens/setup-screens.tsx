@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { connectionLogEntries, connectionLogText, subscribeConnectionLog } from '../services/connection-log'
+import { downloadUrls, fetchLatestRelease, isNewerVersion, updatePageUrl } from '../services/app-update'
 import { exportConnectionLog } from '../services/export-connection-log'
 import { useBrowseMemory, browsePreference } from '../services/browse-memory'
 import * as Application from 'expo-application'
@@ -34,8 +35,6 @@ import type { ThemePreference, TypographyDensity } from '../ui/theme'
 
 /** Default DSH Remote Server; a build can override it via EXPO_PUBLIC_DSH_REMOTE_SERVER. */
 const defaultServerUrl = 'https://dsh.r2049.cn'
-const updateUrl = 'https://github.com/liguobao/ds-harness-remote/releases/latest'
-const releaseApiUrl = 'https://api.github.com/repos/liguobao/ds-harness-remote/releases/latest'
 const developerUrl = 'https://www.zhihu.com/people/codelover'
 const twitterUrl = 'https://x.com/liguobao2077'
 
@@ -1180,19 +1179,15 @@ function useUpdateCheck() {
     const silent = options?.silent === true
     if (!silent) setPhase('checking')
     try {
-      const response = await fetch(releaseApiUrl)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const release = await response.json() as {
-        tag_name?: unknown
-        assets?: Array<{ name?: unknown; browser_download_url?: unknown }>
-      }
-      const latest = String(release.tag_name ?? '').replace(/^v/i, '')
-      const apkAsset = Array.isArray(release.assets)
-        ? release.assets.find(asset => typeof asset.name === 'string' && asset.name.toLowerCase().endsWith('.apk'))
-        : undefined
-      const downloadUrl = typeof apkAsset?.browser_download_url === 'string' ? apkAsset.browser_download_url : undefined
+      // The fork publishes its own `0.6.4-own.N` releases; the upstream repo
+      // never contains this APK and its plain `0.6.4` tag is not newer than a
+      // suffixed build, so the update channel has to come from app-update.ts.
+      const release = await fetchLatestRelease()
+      if (release === undefined) throw new Error('release-check-failed')
+      const latest = release.version
+      const downloadUrl = release.downloadUrl
       if (!silent) setPhase('idle')
-      if (latest !== '' && isNewerVersion(latest, appVersion)) {
+      if (isNewerVersion(latest, appVersion)) {
         cachedLatestVersion = latest
         setLatestVersion(latest)
         Alert.alert(
@@ -1202,7 +1197,7 @@ function useUpdateCheck() {
             { text: zhCN.common.cancel, style: 'cancel' },
             downloadUrl !== undefined
               ? { text: zhCN.settings.downloadUpdate, onPress: () => void downloadAndInstall(downloadUrl) }
-              : { text: zhCN.settings.openUpdates, onPress: () => void Linking.openURL(updateUrl) },
+              : { text: zhCN.settings.openUpdates, onPress: () => void Linking.openURL(updatePageUrl()) },
           ],
         )
       } else {
@@ -1223,12 +1218,24 @@ function useUpdateCheck() {
     setProgress(null)
     try {
       const destination = new File(Paths.cache, 'dsh-remote-latest.apk')
-      const file = await File.downloadFileAsync(url, destination, {
-        idempotent: true,
-        onProgress: ({ bytesWritten, totalBytes }) => {
-          if (totalBytes > 0) setProgress(Math.round((bytesWritten / totalBytes) * 100))
-        },
-      })
+      // GitHub asset hosts are intermittently blocked on mobile networks in
+      // China; retry the same asset through the mirror chain before failing.
+      let file: File | undefined
+      for (const candidate of downloadUrls(url)) {
+        try {
+          setProgress(null)
+          file = await File.downloadFileAsync(candidate, destination, {
+            idempotent: true,
+            onProgress: ({ bytesWritten, totalBytes }) => {
+              if (totalBytes > 0) setProgress(Math.round((bytesWritten / totalBytes) * 100))
+            },
+          })
+          break
+        } catch {
+          file = undefined
+        }
+      }
+      if (file === undefined) throw new Error('download-failed')
       try {
         const contentUri = await getContentUriAsync(file.uri)
         await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
@@ -1299,31 +1306,6 @@ function HomeMenuRow({ icon: Icon, label, subtitle, onPress, disabled = false, l
         : null}
     </Pressable>
   )
-}
-
-function isNewerVersion(latest: string, current: string): boolean {
-  // Upstream releases use plain numeric versions (0.6.4). This fork reports a
-  // suffixed build (0.6.4-own.5) so it stays recognisable on the device; the
-  // suffix must not count as an older or unknown version, otherwise the
-  // upstream release banner appears on every launch.
-  const core = (value: string): number[] | null => {
-    const match = /^\s*v?(\d+(?:\.\d+)*)/i.exec(value)
-    const raw = match?.[1]
-    if (raw === undefined) return null
-    const parts = raw.split('.').map(Number)
-    return parts.length > 0 && parts.every(part => Number.isFinite(part)) ? parts : null
-  }
-  const a = core(latest)
-  const b = core(current)
-  if (a === null) return false
-  if (b === null) return true // installed version is unknown; assume an update is available
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0
-    const y = b[i] ?? 0
-    if (x > y) return true
-    if (x < y) return false
-  }
-  return false
 }
 
 const TERMINAL_PALETTE = {
@@ -1576,7 +1558,7 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
             <SettingsLink label={zhCN.settings.developer} value={zhCN.settings.developerValue} url={developerUrl} />
             <SettingsLink label={zhCN.settings.twitter} url={twitterUrl} />
             <SettingsLink label={zhCN.settings.sourceCodeUrl} url={SOURCE_CODE_URL} />
-            <SettingsLink label={zhCN.settings.updateUrl} url={updateUrl} />
+            <SettingsLink label={zhCN.settings.updateUrl} url={updatePageUrl()} />
           </View>
         </Screen>
       </BlurHeaderFrame>
