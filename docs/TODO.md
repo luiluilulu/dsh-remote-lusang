@@ -1,5 +1,12 @@
 # TODO
 
+## Android 断线保留输入草稿（Issue #7 / 上游 #409）
+
+- [x] 断线不再禁用聊天输入框：编辑只受权限切换与上传中等组合器本地状态约束，恢复连接后仍由用户手动发送。
+- [x] 离线发送在清空草稿前短路；`sendMessage` 在插入乐观行前对非连接状态失败关闭，避免幽灵行或重复消息。
+- [x] 草稿继续按会话加密保存并随切后台落盘；七种语言新增离线发送提示。
+- [ ] 真机/跨设备验收：断网继续编辑、切后台与杀进程后草稿恢复、重连后手动发送一次、离线点击发送无副作用、TalkBack 与大字体；Bot 模式草稿不落盘的差异需在说明中保留。
+
 更新日期：2026-11-05。当前源码版本为 `0.6.3`，Android `versionCode 71`，Expo iOS `buildNumber 71`；Tag、npm 与 GitHub Release 状态以实际发布结果为准。
 
 最近一次构建验证见 [AGENTS.md 的 0.5.20 合并后重建记录](../AGENTS.md#post-merge-0520-rebuild-2026-10-27)：全仓 check、847 tests、串行生产 build（含 Android Hermes）、DSH bundle 与打包检查通过。这是既有验证记录，本轮文档清理未重新运行；未新增 APK、原生真机或跨设备验收。Metro noble/hashes exports fallback 警告仍保留。

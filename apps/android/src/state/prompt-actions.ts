@@ -51,20 +51,24 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
       const session = get().selectedSession
       const text = input.trim()
       if (session === undefined || (text.length === 0 && images.length === 0)) return 'rejected'
+      // Fail closed before the optimistic row is inserted. Without this guard an
+      // offline prompt becomes a `local:` row marked failed/unconfirmed and the
+      // call returns 'kept', which forbids the caller from restoring the draft.
+      if (get().connection.phase !== 'connected') {
+        // Keep our fork's actionable Codex reason instead of a silent reject.
+        if (session.backend === 'codex') set({ error: CODEX_OFFLINE_MESSAGE })
+        return 'rejected'
+      }
       // The Codex live stream carries turn events; a Prompt sent while it is
       // missing would run on the Host but never display a reply. The previous
       // code returned silently, so the composer restored the draft with no
       // explanation. Surface an actionable reason instead (chat screen shows
       // `state.error` for a rejected send) and keep the no-mutation contract.
-      const codexNotReady = session.backend === 'codex' && (get().connection.phase !== 'connected'
-        || get().codexReadySessionId !== session.sessionId || runtime.activeCodexStream === undefined
+      const codexNotReady = session.backend === 'codex' && (get().codexReadySessionId !== session.sessionId
+        || runtime.activeCodexStream === undefined
         || runtime.activeCodexTimeline?.session.nativeId !== codexThreadId(session))
       if (codexNotReady) {
-        set({
-          error: get().connection.phase !== 'connected'
-            ? CODEX_OFFLINE_MESSAGE
-            : CODEX_SESSION_NOT_READY_MESSAGE,
-        })
+        set({ error: CODEX_SESSION_NOT_READY_MESSAGE })
         return 'rejected'
       }
       if ((session.backend === undefined || session.backend === 'harness') && /^\/(?:file|goal|plan|feedback|compact|export)(?:\s|$)/u.test(text)) {
