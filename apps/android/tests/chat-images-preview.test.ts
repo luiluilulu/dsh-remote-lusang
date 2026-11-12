@@ -58,6 +58,38 @@ describe('chat images and attachment preview (Issue #159)', () => {
     expect(limits?.maxImagesPerMessage).toBe(4)
   })
 
+  it('defaults Harness image capability when the snapshot omits imageLimits', () => {
+    // Harness snapshots often omit the optional `imageLimits` projection; that must
+    // mean "unknown", not "no images", or the attachment menu collapses to Files only.
+    const session = {
+      sessionId: 'h1',
+      title: 'harness',
+      running: false,
+      projections: { values: {} },
+    } as unknown as RemoteSession
+    const limits = sessionImageLimits(session)
+    expect(limits).toBeDefined()
+    expect(limits?.maxImagesPerMessage).toBe(4)
+    expect(limits?.maxImageBytes).toBe(8 * 1024 * 1024)
+    expect(limits?.mediaTypes).toEqual(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+  })
+
+  it('keeps image actions hidden for an explicit unsupported projection or non-Harness backends', () => {
+    const unsupported = {
+      sessionId: 'h2',
+      title: 'harness',
+      running: false,
+      projections: {
+        values: {
+          imageLimits: { maxImageBytes: 0, maxImagesPerMessage: 0, maxMessageImageBytes: 0, maxImagePixels: 0, maxImageDimension: 0, mediaTypes: [] },
+        },
+      },
+    } as unknown as RemoteSession
+    expect(sessionImageLimits(unsupported)).toBeUndefined()
+    const acp = { sessionId: 'p1', title: 'pi', running: false, backend: 'pi' } as unknown as RemoteSession
+    expect(sessionImageLimits(acp)).toBeUndefined()
+  })
+
   it('exposes valid imageLimits for Hermes sessions created via createHermesSession', () => {
     const session = createHermesSession({ acpSessionId: 'hermes-1', cwd: '/work' })
     const limits = sessionImageLimits(session)

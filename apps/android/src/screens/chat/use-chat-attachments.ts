@@ -83,6 +83,10 @@ export function useChatAttachments({ session, memoryKey, images, setImages, stag
     }
   }
 
+  // Harness sessions fall back to the documented default image limits when the Host
+  // snapshot omits `imageLimits` (see chat-images.ts), so an absent projection no
+  // longer hides the camera/gallery actions; only an explicit unsupported projection
+  // does. Codex/ACP keep the capability override they already had.
   const canAttachImages = session !== undefined && (sessionImageLimits(session) !== undefined
     || session.backend === 'antigravity' || session.backend === 'cursor' || session.backend === 'codex')
 
