@@ -1,9 +1,10 @@
 import { heartbeatMessageBody } from '../../ui/heartbeat-message'
 import { ChatImageView } from '../../ui/chat-image'
-import { ArrowUp, Bot, Check, CircleCheck, ChevronDown, ChevronRight, ChevronUp, Code2, FilePenLine, FileSearch, ListTree, RefreshCw, ShieldAlert, Sparkles, Terminal, Wrench, User, X } from 'lucide-react-native'
+import { ArrowUp, Bot, Check, CircleCheck, ChevronDown, ChevronRight, ChevronUp, Code2, FilePenLine, FileSearch, ListTree, RefreshCw, ShieldAlert, Sparkles, Terminal, Trash2, Wrench, User, X } from 'lucide-react-native'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
+  ActivityIndicator,
   Alert,
   Animated,
   Modal,
@@ -43,6 +44,7 @@ import { useThemedStyles } from '../../ui/use-themed-styles'
 import { parseBotReplies } from '../bot/replies'
 import { BotReplies } from '../bot/reply-view'
 import type { BotObject } from '../../services/bot-catalog'
+import type { QueueDockItem } from './use-chat-transcript'
 import type { ProcessActivity, ProcessSegment } from '../chat-process'
 import { processSummary, processDetail, processSegments, toolActivity, toolDisplayName } from '../chat-process'
 import { MessageActions } from '../message-actions'
@@ -381,6 +383,35 @@ const compactResendStyles = StyleSheet.create({
   text: { fontSize: 12, lineHeight: 16, flexShrink: 1 },
 })
 
+/**
+ * Local-only removal for a user message the Host never delivered. The protocol
+ * has no recall, so this affordance is deliberately limited to rows that still
+ * carry `nativeSeq === undefined` (failed/unconfirmed/canceled/local queued).
+ */
+function UserRowDelete({ itemId }: { itemId: string }) {
+  const { colors } = useTheme()
+  const confirm = () => {
+    Alert.alert(zhCN.chat.deleteMessageTitle, zhCN.chat.deleteMessageBody, [
+      { text: zhCN.common.cancel, style: 'cancel' },
+      {
+        text: zhCN.common.delete,
+        style: 'destructive',
+        onPress: () => { void useAppStore.getState().deleteChatMessage(itemId) },
+      },
+    ])
+  }
+  return (
+    <View style={localUserRowStyles.actions}>
+      <IconButton label={zhCN.chat.deleteMessage} icon={Trash2} dense tint={colors.muted} onPress={confirm} />
+    </View>
+  )
+}
+
+const localUserRowStyles = StyleSheet.create({
+  outcome: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, alignSelf: 'flex-end' },
+  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+})
+
 /** Bounded pause between sequential retries; the store refuses while busy. */
 const RESEND_SETTLE_TIMEOUT_MS = 4_000
 async function waitForResendIdle(): Promise<boolean> {
@@ -469,6 +500,10 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
 
   if (user) {
     const undelivered = item.sendState === 'failed' || item.sendState === 'unconfirmed'
+    // Only rows that never reached the Host can be removed locally; delivered
+    // messages keep the protocol's no-recall semantics.
+    const localUndelivered = item.nativeSeq === undefined
+      && (undelivered || item.sendState === 'canceled')
     const heartbeatBody = heartbeatMessageBody(item.text, 'user')
     const { quotes, body } = parseMessageQuotes(item.text)
     return <View style={styles.userBlock}>
@@ -493,15 +528,22 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
         )}
       </View>
       {item.sendState === 'canceled'
-        ? <Text style={styles.canceledText}>{zhCN.chat.sendCanceled}</Text>
+        ? <View style={localUserRowStyles.outcome}>
+          <Text style={styles.canceledText}>{zhCN.chat.sendCanceled}</Text>
+          {localUndelivered && <UserRowDelete itemId={item.id} />}
+        </View>
         : <>
           {/* One compact retry row for the whole conversation belongs to the
               newest undelivered row; older failures keep only their actions. */}
           {undelivered && resendIds !== undefined && resendStatus !== undefined && (
             <UserRowResend ids={resendIds} status={resendStatus} missingImages={resendMissingImages === true} />
           )}
-          {/* Failed rows keep their actions: losing copy would be a regression. */}
-          <MessageActions item={item} />
+          {/* Failed rows keep their actions: losing copy would be a regression.
+              Undelivered rows may also be deleted from this device. */}
+          <View style={localUserRowStyles.actions}>
+            <MessageActions item={item} />
+            {localUndelivered && <UserRowDelete itemId={item.id} />}
+          </View>
         </>}
     </View>
   }
@@ -803,32 +845,94 @@ function QuestionCard({ item, busy, onRespond }: {
 }
 
 /** Compact DSH QueueDock mirror: queued prompts waiting for the next turn. */
-export function QueueDock({ items }: { items: { id?: string; rpcId?: string; preview: string }[] }) {
+export function QueueDock({ items }: { items: QueueDockItem[] }) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const [busyKey, setBusyKey] = useState<string>()
+  // A local queued row can be shown before the Host inbox projection admits it
+  // into a row with an id. Resolve by rpcId with a bounded wait so the dock can
+  // still steer/remove on the Host instead of rendering no action at all.
+  const hostItemId = async (item: QueueDockItem): Promise<string | undefined> => {
+    if (item.id !== undefined) return item.id
+    if (item.rpcId === undefined) return undefined
+    return await useAppStore.getState().resolveQueuedHostItemId(item.rpcId)
+  }
+  const run = async (key: string, action: () => Promise<void>) => {
+    if (busyKey !== undefined) return
+    setBusyKey(key)
+    try {
+      await action()
+    } finally {
+      setBusyKey(undefined)
+    }
+  }
+  const reportFailure = (reason?: string) => {
+    Alert.alert(
+      zhCN.chat.queueActionUnavailableTitle,
+      reason ?? useAppStore.getState().error ?? zhCN.chat.queueActionUnavailableBody,
+    )
+  }
+  const steer = (item: QueueDockItem, key: string) => void run(key, async () => {
+    const id = await hostItemId(item)
+    if (id === undefined) return reportFailure(zhCN.chat.queueActionUnavailableBody)
+    const accepted = await useAppStore.getState().updateQueueItem(id, 'steer', item.rpcId)
+    if (!accepted) reportFailure()
+  })
+  const remove = (item: QueueDockItem, key: string) => void run(key, async () => {
+    const id = await hostItemId(item)
+    if (id !== undefined) {
+      const accepted = await useAppStore.getState().updateQueueItem(id, 'remove', item.rpcId)
+      if (!accepted) reportFailure()
+      return
+    }
+    // No Host row exists yet, so a Host-side removal is impossible. Offer the
+    // device-local removal with an explicit caveat instead of a dead button.
+    if (item.messageId === undefined) return reportFailure(zhCN.chat.queueActionUnavailableBody)
+    Alert.alert(zhCN.chat.queueLocalRemoveTitle, zhCN.chat.queueLocalRemoveBody, [
+      { text: zhCN.common.cancel, style: 'cancel' },
+      {
+        text: zhCN.chat.queueRemove,
+        style: 'destructive',
+        onPress: () => {
+          void useAppStore.getState().deleteChatMessage(item.messageId!)
+            .then(removed => { if (!removed) reportFailure() })
+        },
+      },
+    ])
+  })
   return (
     <View style={styles.queueDock} accessibilityRole="summary" accessibilityLabel={zhCN.chat.queueTitle(items.length)}>
       <View style={styles.queueDockHeader}>
         <ListTree size={14} color={colors.primary} />
         <Text style={styles.queueDockTitle}>{zhCN.chat.queueTitle(items.length)}</Text>
       </View>
-      {items.map((item, index) => (
-        <View key={item.id ?? `local:${index}`} style={styles.queueDockRow}>
-          <Text style={styles.queueDockText} numberOfLines={1}>{item.preview.trim().length > 0 ? item.preview.trim() : zhCN.chat.queuePending}</Text>
-          {item.id !== undefined && <>
-            {/* The stop-loss path: without remove/steer a mis-queued prompt can
-                only be stopped by killing the running task (official QueueDock
-                offers edit/remove/steer per row). */}
-            <IconButton label={zhCN.chat.queueSteer} icon={ArrowUp} dense
-              onPress={() => void useAppStore.getState().updateQueueItem(item.id!, 'steer', item.rpcId)} />
-            <IconButton label={zhCN.chat.queueRemove} icon={X} dense
-              onPress={() => void useAppStore.getState().updateQueueItem(item.id!, 'remove', item.rpcId)} />
-          </>}
-        </View>
-      ))}
+      {items.map((item, index) => {
+        const key = item.key ?? item.id ?? item.messageId ?? `queue:${index}`
+        return (
+          <View key={key} style={styles.queueDockRow}>
+            <Text style={styles.queueDockText} numberOfLines={1}>{item.preview.trim().length > 0 ? item.preview.trim() : zhCN.chat.queuePending}</Text>
+            {item.local === true && <Text style={[localQueueStyles.localTag, { color: colors.muted }]}>{zhCN.chat.queueLocalPending}</Text>}
+            {busyKey === key
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <>
+                {/* The stop-loss path: without remove/steer a mis-queued prompt can
+                    only be stopped by killing the running task (official QueueDock
+                    offers edit/remove/steer per row). Both actions stay rendered for
+                    every row; a row without a Host id falls back to a local cancel
+                    with an explanation rather than showing an empty trailing area. */}
+                <IconButton label={zhCN.chat.queueSteer} icon={ArrowUp} dense onPress={() => steer(item, key)} />
+                <IconButton label={zhCN.chat.queueRemove} icon={X} dense onPress={() => remove(item, key)} />
+              </>}
+          </View>
+        )
+      })}
     </View>
   )
 }
+
+const localQueueStyles = StyleSheet.create({
+  localTag: { fontSize: 11, marginRight: 2, flexShrink: 0 },
+})
 
 export function WelcomeMessage() {
   const { colors } = useTheme()

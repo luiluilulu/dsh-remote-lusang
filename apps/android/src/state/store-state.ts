@@ -169,6 +169,10 @@ export interface AppState {
   sendMessage(text: string, images?: PromptImage[], reuseRpcId?: string): Promise<SendMessageResult>
   retrySendMessage(itemId: string): Promise<boolean>
   updateQueueItem(itemId: string, action: 'remove' | 'steer', rpcId?: string): Promise<boolean>
+  /** Bounded wait for a local queued prompt's Host inbox row; returns its host item id. */
+  resolveQueuedHostItemId(rpcId: string): Promise<string | undefined>
+  /** Remove a locally undelivered user message (failed/unconfirmed/canceled/local queued). */
+  deleteChatMessage(itemId: string): Promise<boolean>
   forkChatMessage(message: ChatMessage): Promise<boolean>
   quoteChatMessage(text: string, sessionId?: string): void
   rateMessage(message: ChatMessage, rating: 'positive' | 'negative'): Promise<boolean>

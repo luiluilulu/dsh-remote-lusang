@@ -6,6 +6,20 @@ import { chatSections, inboxQueuedItems, inboxRpcIds, mergeReplyReasoning } from
 import type { ChatItem, RemoteSession, TeamMemberSnapshot, TeamTaskSnapshot } from '../../types'
 import { useSessionUiArtifacts } from './use-session-ui-artifacts'
 
+/** One row of the queue dock, whether the Host admitted it or it is still local. */
+export interface QueueDockItem {
+  /** Stable React key; generated from id/messageId/index when a producer omits it. */
+  key?: string
+  /** Host inbox item id; the only value `session/updateQueue` accepts. */
+  id?: string
+  rpcId?: string
+  /** Local optimistic message id, used for a device-local removal. */
+  messageId?: string
+  preview: string
+  /** True until the Host inbox projection admits this prompt into a row with an id. */
+  local?: boolean
+}
+
 /**
  * Conversation that owns the agent roster. Subagent children only publish
  * their own projections, so the team view must be read from the root of the
@@ -78,16 +92,32 @@ export function useChatTranscript({ session, sessions, messages, hostId }: { ses
   // items queued from other devices); local `queued` rows are the fallback for
   // Hosts without projections. Rows in this state are hidden from the timeline.
   const inboxProjection = (session?.projections?.values as Record<string, unknown> | undefined)?.inbox
-  const queueItems = useMemo(() => {
-    const inboxItems = inboxProjection === undefined ? [] : inboxQueuedItems(inboxProjection)
+  const queueItems = useMemo<QueueDockItem[]>(() => {
+    const inboxItems: QueueDockItem[] = (inboxProjection === undefined ? [] : inboxQueuedItems(inboxProjection))
+      .map((item, index) => ({
+        key: item.id === undefined ? `inbox:${item.rpcId ?? index}` : `inbox:${item.id}`,
+        ...(item.id === undefined ? {} : { id: item.id }),
+        ...(item.rpcId === undefined ? {} : { rpcId: item.rpcId }),
+        preview: item.preview,
+        local: false,
+      }))
     const adopted = inboxRpcIds(inboxProjection)
-    const pending = messages.flatMap(item => item.kind === 'message' && item.role === 'user' && item.sendState === 'queued'
-      && item.queuedAdopted !== true
-      && (item.requestRpcId === undefined || !adopted.has(item.requestRpcId)) ? [{ preview: item.text }] : [])
+    const pending: QueueDockItem[] = messages.flatMap(item => item.kind === 'message' && item.role === 'user'
+      && item.sendState === 'queued' && item.queuedAdopted !== true
+      && (item.requestRpcId === undefined || !adopted.has(item.requestRpcId))
+      ? [{
+        key: `local:${item.id}`,
+        ...(item.requestRpcId === undefined ? {} : { rpcId: item.requestRpcId }),
+        messageId: item.id,
+        preview: item.text,
+        local: true,
+      }]
+      : [])
     // Union (the official QueueDock's pendingQueue behaviour): inbox rows are
-    // authoritative and local rows not yet adopted by the projection cover the
-    // lag window, so a queued prompt is never invisible on both ends. Only
-    // inbox rows carry the host item id needed for queue actions.
+    // authoritative and local rows not yet admitted by the projection cover the
+    // lag window, so a queued prompt is never invisible on both ends. Rows the
+    // Host has not admitted keep their local message id so the dock can still
+    // show actions (resolve by rpcId, then local removal) instead of going blank.
     return [...inboxItems, ...pending]
   }, [inboxProjection, messages])
   // Subagent children only carry their own projections. Reading the team from

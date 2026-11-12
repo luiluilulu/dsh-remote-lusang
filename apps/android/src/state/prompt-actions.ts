@@ -10,14 +10,18 @@ import {
 import { cursorNativeId } from '../services/cursor'
 import type { ChatItem } from '../types'
 import { withCodexPermissionState } from './codex-session-state'
-import { findApproval, findQuestion, inboxRpcIds, mapApprovalOutcome, mapQuestionAnswered } from './message-helpers'
+import { findApproval, findQuestion, inboxQueuedItems, inboxRpcIds, mapApprovalOutcome, mapQuestionAnswered } from './message-helpers'
 import type { SessionAccess } from './session-runtime'
 import { isRecord, record, stringValue, withActiveCodexTurn } from './session-state'
 import type { AppState } from './store-state'
 
+/** How long a local queued prompt waits for its Host inbox row before acting locally. */
+const QUEUE_ADOPTION_WAIT_MS = 1_500
+const QUEUE_ADOPTION_POLL_MS = 100
+
 /** Prompt actions use the store's single connection/session runtime. */
 export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<AppState,
-  'sendMessage' | 'updateQueueItem' | 'retrySendMessage' | 'stopSession' | 'respondApproval' | 'respondQuestion'> {
+  'sendMessage' | 'updateQueueItem' | 'resolveQueuedHostItemId' | 'deleteChatMessage' | 'retrySendMessage' | 'stopSession' | 'respondApproval' | 'respondQuestion'> {
   return {
     async sendMessage(input, images = [], reuseRpcId) {
       if (get().busyAction?.startsWith('session:')) return 'rejected'
@@ -271,6 +275,55 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
           },
         }))
       }
+      return true
+    },
+
+    async resolveQueuedHostItemId(rpcId) {
+      // A local `queued` row can be shown before the Host inbox projection
+      // admits it into a row with an id. Wait a bounded moment (applying mux
+      // frames as they arrive) so the dock can still address the Host row
+      // instead of only offering a local remove.
+      const session = get().selectedSession
+      if (session === undefined || session.backend !== undefined && session.backend !== 'harness'
+        || get().connection.phase !== 'connected' || rpcId.length === 0) return undefined
+      const deadline = Date.now() + QUEUE_ADOPTION_WAIT_MS
+      while (true) {
+        runtime.flushPendingMuxFrames()
+        const current = get().selectedSession?.sessionId === session.sessionId
+          ? get().selectedSession
+          : get().sessions.find(item => item.sessionId === session.sessionId)
+        const id = inboxQueuedItems(current?.projections?.values?.inbox)
+          .find(item => item.rpcId === rpcId)?.id
+        if (id !== undefined) return id
+        if (Date.now() >= deadline) return undefined
+        await new Promise<void>(resolve => setTimeout(resolve, QUEUE_ADOPTION_POLL_MS))
+      }
+    },
+
+    async deleteChatMessage(itemId) {
+      runtime.flushPendingMuxFrames()
+      const session = get().selectedSession
+      if (session === undefined) return false
+      const rows = get().messages[session.sessionId] ?? []
+      const row = rows.find(item => item.id === itemId)
+      // Only local, never-delivered user rows are removable: the Host protocol
+      // has no recall, so a delivered row must stay in the conversation.
+      if (row?.kind !== 'message' || row.role !== 'user' || row.nativeSeq !== undefined) return false
+      const localUndelivered = row.sendState === 'failed' || row.sendState === 'unconfirmed'
+        || row.sendState === 'canceled' || (row.sendState === 'queued' && row.queuedAdopted !== true)
+      if (!localUndelivered) return false
+      // A delivered echo under the same request means the Host accepted the
+      // prompt after all; removing the local row would hide a real message.
+      const delivered = row.requestRpcId !== undefined && rows.some(item =>
+        item.id !== itemId && item.kind === 'message' && item.requestRpcId === row.requestRpcId
+          && item.nativeSeq !== undefined)
+      if (delivered) return false
+      set(state => ({
+        messages: {
+          ...state.messages,
+          [session.sessionId]: (state.messages[session.sessionId] ?? []).filter(item => item.id !== itemId),
+        },
+      }))
       return true
     },
 

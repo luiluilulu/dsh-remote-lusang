@@ -1380,3 +1380,63 @@ describe('authoritative permission projection', () => {
   }, 15000)
 
 })
+
+describe('Queue dock host-row resolution and local deletion (round 7)', () => {
+  const queueRow = (id: string, rpcId: string) => ({ id, source: { kind: 'user', rpcId }, content: [{ type: 'text', text: `queued ${id}` }] })
+  const withInbox = (rows: unknown[], base: RemoteSession = session): RemoteSession => ({
+    ...base,
+    projections: { values: { ...base.projections?.values, inbox: { 'next-turn': rows, 'next-step': [] } } },
+  })
+  const userRow = (overrides: Partial<ChatItem> & { id: string }): ChatItem => ({
+    kind: 'message', sessionId: 's1', role: 'user', text: 'hello', createdAt: 1,
+    ...overrides,
+  } as ChatItem)
+
+  it('resolves a local queued prompt to its Host inbox id by rpcId', async () => {
+    useAppStore.setState({
+      selectedSession: withInbox([queueRow('host-item-1', 'rpc-1')]),
+      sessions: [withInbox([queueRow('host-item-1', 'rpc-1')])],
+    })
+    expect(await useAppStore.getState().resolveQueuedHostItemId('rpc-1')).toBe('host-item-1')
+  })
+
+  it('returns undefined after a bounded wait when the Host row never arrives', async () => {
+    vi.useFakeTimers()
+    try {
+      const pending = useAppStore.getState().resolveQueuedHostItemId('rpc-missing')
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(await pending).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('deletes only local undelivered user rows', async () => {
+    const failed = userRow({ id: 'local:failed', requestRpcId: 'rpc-f', sendState: 'failed', sendError: 'offline' })
+    const unconfirmed = userRow({ id: 'local:unconfirmed', requestRpcId: 'rpc-u', sendState: 'unconfirmed' })
+    const canceled = userRow({ id: 'local:canceled', requestRpcId: 'rpc-c', sendState: 'canceled' })
+    const queuedLocal = userRow({ id: 'local:queued', requestRpcId: 'rpc-q', sendState: 'queued' })
+    const queuedHost = userRow({ id: 'local:adopted', requestRpcId: 'rpc-a', sendState: 'queued', queuedAdopted: true })
+    const delivered = userRow({ id: 'delivered', nativeSeq: 12, text: 'sent' })
+    const assistant: ChatItem = { kind: 'message', id: 'a1', sessionId: 's1', role: 'assistant', text: 'reply', createdAt: 2 }
+    useAppStore.setState({ messages: { s1: [failed, unconfirmed, canceled, queuedLocal, queuedHost, delivered, assistant] } })
+
+    for (const id of ['local:failed', 'local:unconfirmed', 'local:canceled', 'local:queued']) {
+      expect(await useAppStore.getState().deleteChatMessage(id)).toBe(true)
+    }
+    // Host-adopted queued rows must be removed through session.updateQueue.
+    expect(await useAppStore.getState().deleteChatMessage('local:adopted')).toBe(false)
+    // Delivered or non-user rows are never removable.
+    expect(await useAppStore.getState().deleteChatMessage('delivered')).toBe(false)
+    expect(await useAppStore.getState().deleteChatMessage('a1')).toBe(false)
+    expect(useAppStore.getState().messages.s1?.map(item => item.id)).toEqual(['local:adopted', 'delivered', 'a1'])
+  })
+
+  it('keeps a local row when a delivered echo exists for the same request', async () => {
+    const failed = userRow({ id: 'local:failed', requestRpcId: 'rpc-dup', sendState: 'failed' })
+    const echo = userRow({ id: 'host-echo', requestRpcId: 'rpc-dup', nativeSeq: 5, text: 'hello' })
+    useAppStore.setState({ messages: { s1: [failed, echo] } })
+    expect(await useAppStore.getState().deleteChatMessage('local:failed')).toBe(false)
+    expect(useAppStore.getState().messages.s1).toHaveLength(2)
+  })
+})
