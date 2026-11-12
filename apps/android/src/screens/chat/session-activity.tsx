@@ -1,20 +1,22 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
-import { ChevronDown, ChevronUp, Flag, Layers, PauseCircle, Users } from 'lucide-react-native'
+import { useEffect, useState } from 'react'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Flag, Layers, PauseCircle, Users } from 'lucide-react-native'
 import type { RemoteGatewayStream } from '@dsh-remote/client-core'
 import type { BackgroundJob } from '../../services/session-tools'
 import type { RemoteSession, TeamMemberSnapshot, TeamTaskSnapshot } from '../../types'
 import { requireSessionTools } from '../../state/store'
 import { strings } from '../../locales/i18n'
+import { IconJobOutline } from '../../ui/dsh-icons'
 import { radius, spacing, type as typography, type ThemeColors } from '../../ui/theme'
 import { useTheme } from '../../ui/theme-context'
 import { useThemedStyles } from '../../ui/use-themed-styles'
 import { TaskProgressChecklist, type TodoItem } from './task-progress-checklist'
-import { BackgroundJobsCard } from './background-jobs-card'
+import { BackgroundJobsCard, formatJobStats } from './background-jobs-card'
 import { AgentTeamCard, formatSubagentStats, formatTeamStats, SubagentsCard } from './agents'
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed' }
+type Section = 'todos' | 'goal' | 'jobs' | 'subagents' | 'team'
 function todosFrom(value: unknown): Todo[] {
   return Array.isArray(value) ? value.filter((item): item is Todo => record(item) && typeof item.content === 'string'
     && ['pending', 'in_progress', 'completed'].includes(String(item.status))) : []
@@ -54,8 +56,15 @@ export function SessionActivityDock({
   const todos = todosFrom(values?.todos)
   const projection = record(values?.goal) ? values.goal : undefined
   const goal = record(projection?.goal) && typeof projection.goal.objective === 'string' ? projection.goal : undefined
-  const [expanded, setExpanded] = useState<'todos' | 'goal' | 'jobs' | 'subagents' | 'team' | undefined>()
-  const toggle = (section: 'todos' | 'goal' | 'jobs' | 'subagents' | 'team') => setExpanded(value => value === section ? undefined : section)
+  const [expanded, setExpanded] = useState<Section | undefined>()
+  const toggle = (section: Section) => setExpanded(value => value === section ? undefined : section)
+  // One pill row carries goal/jobs/subagents/team; every pill opens its details
+  // underneath and tapping the same pill again folds the dock back to one line.
+  const pillStyle = (section: Section) => ({ pressed }: { pressed: boolean }) => [
+    styles.compactPill,
+    expanded === section && styles.compactPillOpen,
+    pressed && styles.compactPillPressed,
+  ]
   const { height } = useWindowDimensions()
   const detailsHeight = Math.min(180, height * 0.24)
   const [jobs, setJobs] = useState<BackgroundJob[]>([])
@@ -76,6 +85,14 @@ export function SessionActivityDock({
   const teamStats = formatTeamStats(teamMembers, sessions ?? [])
   const hasSubagents = subagentSessions.length > 0
   const hasTeam = teamMembers.length > 0
+  const jobsStats = formatJobStats(jobs)
+  const jobsVisible = jobsLoading || jobError || jobs.length > 0
+  const goalRounds = typeof projection?.roundsStarted === 'number' && typeof goal?.maxGoalRounds === 'number'
+    ? `${projection.roundsStarted}/${goal.maxGoalRounds}`
+    : undefined
+  const goalPillStats = goal === undefined ? '' : [phase(goal.phase), goalRounds].filter((item): item is string => item !== undefined && item.length > 0).join(' ')
+  const jobsPillStats = jobsLoading && jobs.length === 0 ? copy.loading : jobError && jobs.length === 0 ? copy.failed : jobsStats.statsText
+  const hasPills = goal !== undefined || jobsVisible || hasSubagents || hasTeam
 
   useEffect(() => {
     const controller = new AbortController()
@@ -115,30 +132,51 @@ export function SessionActivityDock({
         maxHeight={detailsHeight}
       />
     )}
-    {goal && <Disclosure title={`${copy.goal} · ${goal.objective}`} trailing={<Text style={styles.status}>{phase(goal.phase)}</Text>}
-      icon={goal.phase === 'paused' ? <PauseCircle size={18} color={colors.muted} /> : <Flag size={18} color={colors.muted} />}
-      open={expanded === 'goal'} onPress={() => toggle('goal')}>
-      <ScrollView style={[styles.details, { maxHeight: detailsHeight }]} nestedScrollEnabled>
-        <Text selectable style={styles.detailText}>{String(goal.objective)}</Text>
-        <Text style={styles.muted}>{phase(goal.phase)}{typeof projection?.roundsStarted === 'number' && typeof goal.maxGoalRounds === 'number' ? ` · ${projection.roundsStarted}/${goal.maxGoalRounds}` : ''}</Text>
-        {record(goal.blockedReason) && typeof goal.blockedReason.message === 'string' && <Text selectable style={styles.detailText}>{goal.blockedReason.message}</Text>}
-      </ScrollView>
-    </Disclosure>}
-    {(jobsLoading || jobError || jobs.length > 0) && (
-      <BackgroundJobsCard
-        jobs={jobs}
-        sessionId={session.sessionId}
-        expanded={expanded === 'jobs'}
-        onToggle={() => toggle('jobs')}
-        loading={jobsLoading}
-        error={jobError}
-        onRefresh={() => { setRefreshing(true); setAttempt(value => value + 1) }}
-        refreshing={refreshing}
-        maxHeight={detailsHeight}
-      />
-    )}
-    {(hasSubagents || hasTeam) && (
-      <View style={styles.compactRow} testID="session-activity-compact">
+    {(goal !== undefined || jobsVisible || hasSubagents || hasTeam) && (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        style={styles.compactScroll}
+        contentContainerStyle={styles.compactRow}
+        testID="session-activity-compact"
+      >
+        {goal !== undefined && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${copy.goal} · ${goalPillStats}`}
+            accessibilityState={{ expanded: expanded === 'goal' }}
+            onPress={() => toggle('goal')}
+            hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+            style={pillStyle('goal')}
+            testID="session-activity-goal-pill"
+          >
+            {goal.phase === 'paused'
+              ? <PauseCircle size={13} color={expanded === 'goal' ? colors.primary : colors.muted} />
+              : <Flag size={13} color={expanded === 'goal' ? colors.primary : colors.muted} />}
+            <Text style={styles.compactPillText} numberOfLines={1}>{copy.goal}</Text>
+            <Text style={styles.compactPillCount} numberOfLines={1}>{goalPillStats}</Text>
+          </Pressable>
+        )}
+        {jobsVisible && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${copy.jobs} · ${jobsPillStats}`}
+            accessibilityState={{ expanded: expanded === 'jobs' }}
+            onPress={() => toggle('jobs')}
+            hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+            style={pillStyle('jobs')}
+            testID="session-activity-jobs-pill"
+          >
+            <IconJobOutline size={13} color={expanded === 'jobs' ? colors.primary : colors.muted} />
+            <Text style={styles.compactPillText} numberOfLines={1}>{copy.jobs}</Text>
+            {jobsLoading && jobs.length === 0
+              ? <ActivityIndicator size={12} color={colors.primary} />
+              : jobError && jobs.length === 0
+                ? <View style={styles.compactPillDot} />
+                : <Text style={styles.compactPillCount} numberOfLines={1}>{jobsStats.statsText}</Text>}
+          </Pressable>
+        )}
         {hasSubagents && (
           <Pressable
             accessibilityRole="button"
@@ -146,11 +184,7 @@ export function SessionActivityDock({
             accessibilityState={{ expanded: expanded === 'subagents' }}
             onPress={() => toggle('subagents')}
             hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
-            style={({ pressed }) => [
-              styles.compactPill,
-              expanded === 'subagents' && styles.compactPillOpen,
-              pressed && styles.compactPillPressed,
-            ]}
+            style={pillStyle('subagents')}
             testID="session-activity-subagents-pill"
           >
             <Layers size={13} color={expanded === 'subagents' ? colors.primary : colors.muted} />
@@ -165,11 +199,7 @@ export function SessionActivityDock({
             accessibilityState={{ expanded: expanded === 'team' }}
             onPress={() => toggle('team')}
             hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
-            style={({ pressed }) => [
-              styles.compactPill,
-              expanded === 'team' && styles.compactPillOpen,
-              pressed && styles.compactPillPressed,
-            ]}
+            style={pillStyle('team')}
             testID="session-activity-team-pill"
           >
             <Users size={13} color={expanded === 'team' ? colors.primary : colors.muted} />
@@ -177,6 +207,30 @@ export function SessionActivityDock({
             <Text style={styles.compactPillCount} numberOfLines={1}>{teamStats.statsText}</Text>
           </Pressable>
         )}
+      </ScrollView>
+    )}
+    {expanded === 'goal' && goal !== undefined && (
+      <View style={styles.expandedSection}>
+        <ScrollView style={[styles.details, { maxHeight: detailsHeight }]} nestedScrollEnabled>
+          <Text selectable style={styles.detailText}>{String(goal.objective)}</Text>
+          <Text style={styles.muted}>{phase(goal.phase)}{goalRounds === undefined ? '' : ` · ${goalRounds}`}</Text>
+          {record(goal.blockedReason) && typeof goal.blockedReason.message === 'string' && <Text selectable style={styles.detailText}>{goal.blockedReason.message}</Text>}
+        </ScrollView>
+      </View>
+    )}
+    {expanded === 'jobs' && jobsVisible && (
+      <View style={styles.expandedSection}>
+        <BackgroundJobsCard
+          headerless
+          jobs={jobs}
+          sessionId={session.sessionId}
+          expanded
+          loading={jobsLoading}
+          error={jobError}
+          onRefresh={() => { setRefreshing(true); setAttempt(value => value + 1) }}
+          refreshing={refreshing}
+          maxHeight={detailsHeight}
+        />
       </View>
     )}
     {expanded === 'subagents' && hasSubagents && (
@@ -202,35 +256,18 @@ export function SessionActivityDock({
   </View>
 }
 
-function Disclosure({ title, icon, open, onPress, children, trailing }: { trailing?: ReactNode; title: string; icon: ReactNode; open: boolean; onPress: () => void; children: ReactNode }) {
-  const { colors } = useTheme()
-  const styles = useThemedStyles(createStyles)
-  return <View style={styles.group}>
-    <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded: open }} onPress={onPress}
-      style={({ pressed }) => [styles.header, pressed && styles.pressed]}>
-      {icon}<Text numberOfLines={1} style={styles.summary}>{title}</Text>{trailing}
-      {open ? <ChevronUp size={16} color={colors.muted} /> : <ChevronDown size={16} color={colors.muted} />}
-    </Pressable>
-    {open && children}
-  </View>
-}
-
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   dock: { gap: spacing.xxs, marginHorizontal: spacing.xs, marginBottom: spacing.xs },
-  // One slim row (pill height 26 + row min 28) replaces the two stacked 44 dp cards.
+  // One slim, horizontally scrollable row replaces the stacked goal/jobs cards.
+  compactScroll: { flexGrow: 0 },
   compactRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  compactPill: { height: 26, maxWidth: '48%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceStrong, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  compactPill: { height: 26, maxWidth: 240, flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceStrong, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
   compactPillOpen: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   compactPillPressed: { opacity: 0.72 },
   compactPillText: { ...typography.caption, color: colors.ink, flexShrink: 1 },
   compactPillCount: { ...typography.caption, color: colors.muted, fontVariant: ['tabular-nums'] },
-  group: { borderRadius: radius.xl, backgroundColor: colors.card, overflow: 'hidden' },
-  header: { minHeight: 44, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  pressed: { backgroundColor: colors.surfaceStrong },
-  title: { ...typography.smallStrong, color: colors.ink, flexShrink: 1 },
-  summary: { ...typography.small, color: colors.ink, flex: 1 },
-  status: { ...typography.caption, color: colors.muted, fontVariant: ['tabular-nums'] },
-  inlineTrack: { width: 28, height: 3, borderRadius: 2, backgroundColor: colors.surfaceStrong },
+  compactPillDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.danger },
+  expandedSection: { borderRadius: radius.xl, backgroundColor: colors.card, overflow: 'hidden', paddingTop: spacing.xs },
   details: { maxHeight: 160, paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
   jobs: { maxHeight: 220 },
   todo: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.xs, alignItems: 'flex-start' },

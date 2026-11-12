@@ -444,6 +444,11 @@ export interface BackgroundJobsCardProps {
   onRefresh?: () => void
   refreshing?: boolean
   maxHeight?: number
+  /**
+   * Render only the expandable content (no card chrome/header) so the activity dock
+   * can open it from its compact `后台任务` pill.
+   */
+  headerless?: boolean
   testID?: string
 }
 
@@ -464,6 +469,7 @@ export const BackgroundJobsCard = memo(function BackgroundJobsCard({
   onRefresh,
   refreshing = false,
   maxHeight,
+  headerless = false,
   testID = 'background-jobs-card',
 }: BackgroundJobsCardProps) {
   const { colors } = useTheme()
@@ -508,6 +514,56 @@ export const BackgroundJobsCard = memo(function BackgroundJobsCard({
 
   const elapsedSeconds = activeJob?.startedAt ? Math.max(0, Math.floor((now - activeJob.startedAt) / 1000)) : undefined
   const elapsedText = elapsedSeconds !== undefined ? formatJobDuration(elapsedSeconds) : undefined
+
+  const content = (
+    <View style={styles.contentWrap} testID={`${testID}-content`}>
+      <View style={styles.divider} />
+
+          {loading && jobs.length === 0 && (
+            <View style={styles.statusRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.statusText}>{copy.loading}</Text>
+            </View>
+          )}
+
+          {error && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onRefresh}
+              style={styles.retry}
+              testID={`${testID}-error-retry`}
+            >
+              <Text style={styles.retryText}>{copy.retry}</Text>
+            </Pressable>
+          )}
+
+          {jobs.length === 0 && !loading && !error && (
+            <Text style={styles.emptyText}>{copy.noJobs}</Text>
+          )}
+
+          {jobs.length > 0 && (
+            <ScrollView
+              style={[styles.list, { maxHeight: listMaxHeight }]}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {jobs.map((job, index) => (
+                <BackgroundJobItem
+                  key={job.id}
+                  job={job}
+                  sessionId={sessionId}
+                  onKill={handleKill}
+                  killing={killingIds[job.id] === true}
+                  testID={`${testID}-item-${index}`}
+                />
+              ))}
+            </ScrollView>
+          )}
+    </View>
+  )
+
+  // The activity dock owns the collapsed pill and only needs the expanded content.
+  if (headerless) return content
 
   return (
     <View style={styles.card} testID={testID}>
@@ -562,52 +618,7 @@ export const BackgroundJobsCard = memo(function BackgroundJobsCard({
         </View>
       </Pressable>
 
-      {isOpen && (
-        <View style={styles.contentWrap} testID={`${testID}-content`}>
-          <View style={styles.divider} />
-
-          {loading && jobs.length === 0 && (
-            <View style={styles.statusRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.statusText}>{copy.loading}</Text>
-            </View>
-          )}
-
-          {error && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={onRefresh}
-              style={styles.retry}
-              testID={`${testID}-error-retry`}
-            >
-              <Text style={styles.retryText}>{copy.retry}</Text>
-            </Pressable>
-          )}
-
-          {jobs.length === 0 && !loading && !error && (
-            <Text style={styles.emptyText}>{copy.noJobs}</Text>
-          )}
-
-          {jobs.length > 0 && (
-            <ScrollView
-              style={[styles.list, { maxHeight: listMaxHeight }]}
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-            >
-              {jobs.map((job, index) => (
-                <BackgroundJobItem
-                  key={job.id}
-                  job={job}
-                  sessionId={sessionId}
-                  onKill={handleKill}
-                  killing={killingIds[job.id] === true}
-                  testID={`${testID}-item-${index}`}
-                />
-              ))}
-            </ScrollView>
-          )}
-        </View>
-      )}
+      {isOpen && content}
     </View>
   )
 })
