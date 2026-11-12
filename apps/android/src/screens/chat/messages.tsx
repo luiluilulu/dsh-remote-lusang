@@ -354,22 +354,60 @@ function UserRowResend({ ids, status, missingImages }: { ids: string[]; status: 
       { text: zhCN.chat.resend, onPress: retry },
     ])
   }
+  // Batch stop-loss: with two or more undelivered notices the single retry row
+  // also offers "clear all". The store deletes only local markers (a delivered
+  // echo or an adopted queue row stays) and reports the removed/kept counts.
+  const undeliveredCount = useAppStore(state => {
+    const sessionId = state.selectedSession?.sessionId
+    if (sessionId === undefined) return 0
+    return (state.messages[sessionId] ?? []).filter(item => item.kind === 'message' && item.role === 'user'
+      && item.nativeSeq === undefined
+      && (item.sendState === 'failed' || item.sendState === 'unconfirmed' || item.sendState === 'canceled'
+        || item.sendState === 'queued')).length
+  })
+  const clearAll = () => {
+    Alert.alert(zhCN.chat.clearUndeliveredTitle, zhCN.chat.clearUndeliveredBody(undeliveredCount), [
+      { text: zhCN.common.cancel, style: 'cancel' },
+      {
+        text: zhCN.chat.clearUndeliveredAction,
+        style: 'destructive',
+        onPress: () => {
+          void useAppStore.getState().deleteUndeliveredMessages().then(result => {
+            Alert.alert(zhCN.chat.clearUndeliveredTitle, zhCN.chat.clearUndeliveredDone(result.deleted, result.kept))
+          })
+        },
+      },
+    ])
+  }
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={reason === undefined ? label : `${label}。${reason}`}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      hitSlop={8}
-      onPress={retry}
-      onLongPress={showReason}
-      style={({ pressed }) => [styles.resendRow, compactResendStyles.row, pressed && !disabled && styles.resendRowPressed, disabled && styles.resendRowDisabled]}
-    >
-      <RefreshCw size={12} color={disabled ? colors.muted : colors.danger} />
-      <Text numberOfLines={1} style={[styles.resendText, compactResendStyles.text, disabled && styles.resendTextMuted, !disabled && styles.resendTextFailed]}>
-        {label}
-      </Text>
-    </Pressable>
+    <View style={localUserRowStyles.resendWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={reason === undefined ? label : `${label}。${reason}`}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        hitSlop={8}
+        onPress={retry}
+        onLongPress={showReason}
+        style={({ pressed }) => [styles.resendRow, compactResendStyles.row, pressed && !disabled && styles.resendRowPressed, disabled && styles.resendRowDisabled]}
+      >
+        <RefreshCw size={12} color={disabled ? colors.muted : colors.danger} />
+        <Text numberOfLines={1} style={[styles.resendText, compactResendStyles.text, disabled && styles.resendTextMuted, !disabled && styles.resendTextFailed]}>
+          {label}
+        </Text>
+      </Pressable>
+      {undeliveredCount >= 2 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={zhCN.chat.clearUndelivered(undeliveredCount)}
+          hitSlop={8}
+          onPress={clearAll}
+          style={({ pressed }) => [localUserRowStyles.clearAll, pressed && styles.resendRowPressed]}
+        >
+          <Text style={[localUserRowStyles.clearAllText, { color: colors.danger }]}>{zhCN.chat.clearUndelivered(undeliveredCount)}</Text>
+        </Pressable>
+      )}
+    </View>
   )
 }
 
@@ -396,7 +434,12 @@ function UserRowDelete({ itemId }: { itemId: string }) {
       {
         text: zhCN.common.delete,
         style: 'destructive',
-        onPress: () => { void useAppStore.getState().deleteChatMessage(itemId) },
+        onPress: () => {
+          void useAppStore.getState().deleteChatMessage(itemId).then(removed => {
+            // Never fail silently: the row may have been delivered meanwhile.
+            if (!removed) Alert.alert(zhCN.chat.deleteMessageFailedTitle, zhCN.chat.deleteMessageFailedBody)
+          })
+        },
       },
     ])
   }
@@ -410,6 +453,9 @@ function UserRowDelete({ itemId }: { itemId: string }) {
 const localUserRowStyles = StyleSheet.create({
   outcome: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, alignSelf: 'flex-end' },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  resendWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', alignSelf: 'flex-end', gap: 6, flexWrap: 'wrap' },
+  clearAll: { paddingHorizontal: 8, paddingVertical: 3, minHeight: 22, justifyContent: 'center' },
+  clearAllText: { fontSize: 12, lineHeight: 16 },
 })
 
 /** Bounded pause between sequential retries; the store refuses while busy. */

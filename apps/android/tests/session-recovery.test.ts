@@ -1432,11 +1432,45 @@ describe('Queue dock host-row resolution and local deletion (round 7)', () => {
     expect(useAppStore.getState().messages.s1?.map(item => item.id)).toEqual(['local:adopted', 'delivered', 'a1'])
   })
 
-  it('keeps a local row when a delivered echo exists for the same request', async () => {
+  it('hides the local failed copy even when the delivered echo exists for the same request', async () => {
     const failed = userRow({ id: 'local:failed', requestRpcId: 'rpc-dup', sendState: 'failed' })
     const echo = userRow({ id: 'host-echo', requestRpcId: 'rpc-dup', nativeSeq: 5, text: 'hello' })
     useAppStore.setState({ messages: { s1: [failed, echo] } })
-    expect(await useAppStore.getState().deleteChatMessage('local:failed')).toBe(false)
-    expect(useAppStore.getState().messages.s1).toHaveLength(2)
+    // The delivered row is the real message and stays; the failed local marker
+    // is only a duplicate and is now hideable instead of silently refused.
+    expect(await useAppStore.getState().deleteChatMessage('local:failed')).toBe(true)
+    expect(useAppStore.getState().messages.s1?.map(item => item.id)).toEqual(['host-echo'])
+  })
+
+  it('auto-prunes local failed copies once the delivered echo is present', async () => {
+    const failed = userRow({ id: 'local:dup', requestRpcId: 'rpc-1', sendState: 'failed', text: '带图消息' })
+    const failedNoRpc = userRow({ id: 'local:text-dup', sendState: 'unconfirmed', text: '同一句话', createdAt: 2 })
+    const echo = userRow({ id: 'host-1', requestRpcId: 'rpc-1', nativeSeq: 7, text: '带图消息', createdAt: 3 })
+    const echoText = userRow({ id: 'host-2', nativeSeq: 8, role: 'user', text: '同一句话', createdAt: 4 })
+    const unrelated = userRow({ id: 'local:kept', requestRpcId: 'rpc-2', sendState: 'failed', text: '真的没送达' })
+    useAppStore.setState({ messages: { s1: [failed, failedNoRpc, unrelated, echo, echoText] } })
+    useAppStore.getState().pruneDeliveredLocalDuplicates()
+    expect(useAppStore.getState().messages.s1?.map(item => item.id)).toEqual(['local:kept', 'host-1', 'host-2'])
+  })
+
+  it('prunes the local failed copy when history restore brings the delivered echo', () => {
+    const failed = userRow({ id: 'local:restore-dup', requestRpcId: 'rpc-r', sendState: 'failed', text: '看图' })
+    // The restored echo lost the rpcId, so it cannot replace the optimistic row
+    // during the fold; the merge is the last place that can drop the duplicate.
+    const echo = userRow({ id: 'host-restore-echo', nativeSeq: 11, text: '看图', createdAt: 2 })
+    expect(mergeHistoryAndLive([echo], [failed]).map(item => item.id)).toEqual(['host-restore-echo'])
+  })
+
+  it('clears every locally undelivered notice and reports kept rows', async () => {
+    const rows = [
+      userRow({ id: 'local:f1', requestRpcId: 'r1', sendState: 'failed' }),
+      userRow({ id: 'local:f2', requestRpcId: 'r2', sendState: 'unconfirmed' }),
+      userRow({ id: 'local:c1', requestRpcId: 'r3', sendState: 'canceled' }),
+      userRow({ id: 'local:adopted', requestRpcId: 'r4', sendState: 'queued', queuedAdopted: true }),
+      userRow({ id: 'delivered', nativeSeq: 9, text: 'sent' }),
+    ]
+    useAppStore.setState({ messages: { s1: rows } })
+    await expect(useAppStore.getState().deleteUndeliveredMessages()).resolves.toEqual({ deleted: 3, kept: 1 })
+    expect(useAppStore.getState().messages.s1?.map(item => item.id)).toEqual(['local:adopted', 'delivered'])
   })
 })

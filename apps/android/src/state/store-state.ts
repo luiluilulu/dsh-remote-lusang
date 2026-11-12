@@ -166,6 +166,13 @@ export interface AppState {
   reconnect(options?: { forceRelay?: boolean; restoreSession?: boolean }): Promise<boolean>
   disconnect(): Promise<void>
   openSession(session: RemoteSession): Promise<boolean>
+  /**
+   * Leave-the-conversation lifecycle: close the Codex live subscription (keeping the
+   * local timeline) so the Host can release the thread writer lock once idle.
+   */
+  releaseCodexLiveStream(): void
+  /** Return-to-the-conversation lifecycle: re-open a suspended Codex live subscription. */
+  resumeCodexLiveStream(): Promise<void>
   sendMessage(text: string, images?: PromptImage[], reuseRpcId?: string): Promise<SendMessageResult>
   retrySendMessage(itemId: string): Promise<boolean>
   updateQueueItem(itemId: string, action: 'remove' | 'steer', rpcId?: string): Promise<boolean>
@@ -173,6 +180,10 @@ export interface AppState {
   resolveQueuedHostItemId(rpcId: string): Promise<string | undefined>
   /** Remove a locally undelivered user message (failed/unconfirmed/canceled/local queued). */
   deleteChatMessage(itemId: string): Promise<boolean>
+  /** Remove every locally undelivered user row; returns removed/kept counts. */
+  deleteUndeliveredMessages(): Promise<{ deleted: number; kept: number }>
+  /** Drop local failed copies whose prompt already arrived as a delivered echo. */
+  pruneDeliveredLocalDuplicates(sessionId?: string): void
   forkChatMessage(message: ChatMessage): Promise<boolean>
   quoteChatMessage(text: string, sessionId?: string): void
   rateMessage(message: ChatMessage, rating: 'positive' | 'negative'): Promise<boolean>

@@ -1,4 +1,5 @@
 import type { ChatItem, HistoryEntry } from '../types'
+import { pruneDeliveredLocalDuplicates } from './event-reducer'
 
 export function findApproval(messages: Record<string, ChatItem[]>, itemId: string) {
   for (const items of Object.values(messages)) {
@@ -149,14 +150,17 @@ export function mergeHistoryAndLive(history: ChatItem[], live: ChatItem[], throu
       return true
     }),
   ]
-  return result.sort((a, b) => {
+  // History restore is the other arrival path for a delivered echo: a failed
+  // local copy must not survive it, or reopening the conversation pins the
+  // "send failed · re-add the image" notice under a turn that already ran.
+  return pruneDeliveredLocalDuplicates(result.sort((a, b) => {
     const left = a.nativeOrderSeq ?? a.nativeSeq
     const right = b.nativeOrderSeq ?? b.nativeSeq
     if (left === undefined && right === undefined) return 0
     if (left === undefined) return 1
     if (right === undefined) return -1
     return left - right
-  })
+  }))
 }
 
 export type ChatSection =

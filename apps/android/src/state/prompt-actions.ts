@@ -8,8 +8,10 @@ import {
   readCodexHistoryPage,
 } from '../services/codex'
 import { cursorNativeId } from '../services/cursor'
+import { browseScope, saveSessionMessagesSnapshot } from '../services/browse-memory'
 import type { ChatItem } from '../types'
 import { withCodexPermissionState } from './codex-session-state'
+import { pruneDeliveredLocalDuplicates } from './event-reducer'
 import { findApproval, findQuestion, inboxQueuedItems, inboxRpcIds, mapApprovalOutcome, mapQuestionAnswered } from './message-helpers'
 import type { SessionAccess } from './session-runtime'
 import { isRecord, record, stringValue, withActiveCodexTurn } from './session-state'
@@ -19,9 +21,28 @@ import type { AppState } from './store-state'
 const QUEUE_ADOPTION_WAIT_MS = 1_500
 const QUEUE_ADOPTION_POLL_MS = 100
 
+/** Local undelivered user rows that the delete affordances may hide. */
+function isLocallyUndeliveredUserRow(item: ChatItem): boolean {
+  if (item.kind !== 'message' || item.role !== 'user' || item.nativeSeq !== undefined) return false
+  return item.sendState === 'failed' || item.sendState === 'unconfirmed' || item.sendState === 'canceled'
+    || (item.sendState === 'queued' && item.queuedAdopted !== true)
+}
+
 /** Prompt actions use the store's single connection/session runtime. */
 export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<AppState,
-  'sendMessage' | 'updateQueueItem' | 'resolveQueuedHostItemId' | 'deleteChatMessage' | 'retrySendMessage' | 'stopSession' | 'respondApproval' | 'respondQuestion'> {
+  'sendMessage' | 'updateQueueItem' | 'resolveQueuedHostItemId' | 'deleteChatMessage' | 'deleteUndeliveredMessages'
+  | 'pruneDeliveredLocalDuplicates' | 'retrySendMessage' | 'stopSession' | 'respondApproval' | 'respondQuestion'> {
+  /** Keep the in-memory transcript and the local browse snapshot in sync. */
+  const commitSessionMessages = (sessionId: string, next: ChatItem[]): void => {
+    set(state => ({ messages: { ...state.messages, [sessionId]: next } }))
+    const state = get()
+    if (state.config?.baseUrl === undefined || state.selectedDevice?.identityKey === undefined) return
+    try {
+      saveSessionMessagesSnapshot(browseScope(state), sessionId, next)
+    } catch {
+      // The snapshot is a convenience cache; the in-memory transcript is truth.
+    }
+  }
   return {
     async sendMessage(input, images = [], reuseRpcId) {
       if (get().busyAction?.startsWith('session:')) return 'rejected'
@@ -306,25 +327,48 @@ export function createPromptActions({ get, set, runtime }: SessionAccess): Pick<
       if (session === undefined) return false
       const rows = get().messages[session.sessionId] ?? []
       const row = rows.find(item => item.id === itemId)
-      // Only local, never-delivered user rows are removable: the Host protocol
-      // has no recall, so a delivered row must stay in the conversation.
-      if (row?.kind !== 'message' || row.role !== 'user' || row.nativeSeq !== undefined) return false
-      const localUndelivered = row.sendState === 'failed' || row.sendState === 'unconfirmed'
-        || row.sendState === 'canceled' || (row.sendState === 'queued' && row.queuedAdopted !== true)
-      if (!localUndelivered) return false
-      // A delivered echo under the same request means the Host accepted the
-      // prompt after all; removing the local row would hide a real message.
-      const delivered = row.requestRpcId !== undefined && rows.some(item =>
-        item.id !== itemId && item.kind === 'message' && item.requestRpcId === row.requestRpcId
-          && item.nativeSeq !== undefined)
-      if (delivered) return false
-      set(state => ({
-        messages: {
-          ...state.messages,
-          [session.sessionId]: (state.messages[session.sessionId] ?? []).filter(item => item.id !== itemId),
-        },
-      }))
+      // Only local rows can be hidden; the Host protocol has no recall, so a
+      // delivered row must stay in the conversation.
+      if (row === undefined || !isLocallyUndeliveredUserRow(row)) return false
+      // A delivered echo under the same request means the prompt reached the
+      // Host after all. The local failed copy is then only a duplicate marker:
+      // allow hiding it here (the real message stays), unlike the old guard
+      // which refused silently and left the row stuck at the bottom forever.
+      commitSessionMessages(session.sessionId, rows.filter(item => item.id !== itemId))
       return true
+    },
+
+    async deleteUndeliveredMessages() {
+      runtime.flushPendingMuxFrames()
+      const session = get().selectedSession
+      if (session === undefined) return { deleted: 0, kept: 0 }
+      const rows = get().messages[session.sessionId] ?? []
+      let deleted = 0
+      let kept = 0
+      const next = rows.filter(item => {
+        // Host-adopted queue rows are visible in the queue dock, not as failed
+        // rows; leave them for the queue remove action and report them as kept.
+        if (item.kind === 'message' && item.role === 'user' && item.nativeSeq === undefined
+          && item.sendState === 'queued' && item.queuedAdopted === true) {
+          kept += 1
+          return true
+        }
+        if (!isLocallyUndeliveredUserRow(item)) return true
+        deleted += 1
+        return false
+      })
+      if (deleted > 0) commitSessionMessages(session.sessionId, next)
+      return { deleted, kept }
+    },
+
+    pruneDeliveredLocalDuplicates(sessionId) {
+      runtime.flushPendingMuxFrames()
+      const target = sessionId ?? get().selectedSession?.sessionId
+      if (target === undefined) return
+      const rows = get().messages[target]
+      if (rows === undefined || rows.length === 0) return
+      const next = pruneDeliveredLocalDuplicates(rows)
+      if (next !== rows) commitSessionMessages(target, next)
     },
 
     async retrySendMessage(itemId) {

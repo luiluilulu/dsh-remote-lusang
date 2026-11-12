@@ -441,6 +441,37 @@ describe('remote mux frame reducer', () => {
     ])
   })
 
+  it('drops a failed local copy when the delivered echo lost the request id', () => {
+    const failed: ChatItem = {
+      kind: 'message', id: 'local:dup', sessionId: 's1', role: 'user', text: '看这张图',
+      requestRpcId: 'rpc-lost', createdAt: 1786000000000 - 2_000, sendState: 'failed', sendError: 'offline',
+    }
+    // A different failed prompt never reached the Host and must stay retryable.
+    const unrelated: ChatItem = {
+      kind: 'message', id: 'local:kept', sessionId: 's1', role: 'user', text: '真的没送达',
+      requestRpcId: 'rpc-kept', createdAt: 1786000000000 - 3_000, sendState: 'failed',
+    }
+    const echoed = frame('push-dup', {
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent({
+        type: 'user/message',
+        data: {
+          message: {
+            id: 'user-message-dup',
+            role: 'user',
+            content: [{ type: 'text', text: '看这张图' }],
+            source: { kind: 'user' },
+          },
+        },
+      }),
+    })
+    // The echo carries no rpcId, so it cannot replace the optimistic row; the
+    // failed copy would otherwise stay at the bottom of a turn that already ran.
+    expect(applyMuxFrame([failed, unrelated], echoed).map(item => item.id))
+      .toEqual(['local:kept', 'user-message-dup'])
+  })
+
   it('routes aggregated mux frames to their owning session', () => {
     const s2Approval = frame('rpc-approval-s2', {
       type: 'approval/requested',

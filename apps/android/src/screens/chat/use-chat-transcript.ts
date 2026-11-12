@@ -4,6 +4,7 @@ import { hasVisibleMessageText } from '../../state/event-reducer'
 import type { ChatSection } from '../../state/message-helpers'
 import { chatSections, inboxQueuedItems, inboxRpcIds, mergeReplyReasoning } from '../../state/message-helpers'
 import type { ChatItem, RemoteSession, TeamMemberSnapshot, TeamTaskSnapshot } from '../../types'
+import { useAppStore } from '../../state/store'
 import { useSessionUiArtifacts } from './use-session-ui-artifacts'
 
 /** One row of the queue dock, whether the Host admitted it or it is still local. */
@@ -88,6 +89,31 @@ export function useChatTranscript({ session, sessions, messages, hostId }: { ses
   useEffect(() => {
     previousSectionsRef.current = []
   }, [session?.sessionId])
+  // A local failed copy whose prompt already reached the Host (delivered echo)
+  // is only a duplicate marker. Leaving it pins "failed · re-add the image" at
+  // the bottom of a conversation that actually ran, with the image gone. The
+  // reducer prunes the live case; this effect also heals history restores and
+  // cached transcripts that were merged on reconnect. The action persists the
+  // pruned list, so a reload cannot revive it.
+  const pruneDeliveredLocalDuplicates = useAppStore(state => state.pruneDeliveredLocalDuplicates)
+  const sessionId = session?.sessionId
+  const pruneSignature = useMemo(() => {
+    let localUndelivered = 0
+    let delivered = 0
+    for (const item of messages) {
+      if (item.kind !== 'message' || item.role !== 'user') continue
+      if (item.nativeSeq !== undefined) delivered += 1
+      else if (item.sendState === 'failed' || item.sendState === 'unconfirmed'
+        || item.sendState === 'canceled' || item.sendState === 'queued') localUndelivered += 1
+    }
+    // Streaming and tool updates leave this signature untouched; it only moves
+    // when a local notice appears or a delivered echo lands.
+    return localUndelivered === 0 ? '' : `${localUndelivered}:${delivered}`
+  }, [messages])
+  useEffect(() => {
+    if (pruneSignature === '' || sessionId === undefined) return
+    pruneDeliveredLocalDuplicates(sessionId)
+  }, [pruneSignature, pruneDeliveredLocalDuplicates, sessionId])
   // Queued prompts: the Host `inbox` projection is authoritative (includes
   // items queued from other devices); local `queued` rows are the fallback for
   // Hosts without projections. Rows in this state are hidden from the timeline.

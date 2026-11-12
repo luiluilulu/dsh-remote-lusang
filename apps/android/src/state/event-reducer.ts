@@ -6,6 +6,36 @@ const MAX_TOOL_DETAIL_CHARS = 64_000
 const IMAGE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DATA_IMAGE_URL = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/u
 
+/**
+ * Drop local optimistic user rows whose prompt the Host delivered under another
+ * native row. A lost send response can leave the failed/unconfirmed local copy
+ * behind after the real echo already arrived; that copy is a duplicate, not
+ * retry material (retrying it would execute the prompt twice), so the delivered
+ * row always wins. Rows without a delivered counterpart are preserved.
+ */
+export function pruneDeliveredLocalDuplicates(items: ChatItem[]): ChatItem[] {
+  const delivered = items.filter((item): item is ChatMessage => item.kind === 'message'
+    && item.role === 'user' && item.nativeSeq !== undefined)
+  if (delivered.length === 0) return items
+  const normalize = (text: string): string => text.trim()
+  const next = items.filter(item => {
+    if (item.kind !== 'message' || item.role !== 'user' || item.nativeSeq !== undefined) return true
+    if (item.sendState !== 'failed' && item.sendState !== 'unconfirmed'
+      && item.sendState !== 'canceled' && item.sendState !== 'queued') return true
+    return !delivered.some(echo => {
+      // Same request id is the strongest identity (echo may or may not keep it).
+      if (item.requestRpcId !== undefined && echo.requestRpcId === item.requestRpcId) return true
+      if (item.requestRpcId !== undefined && echo.requestRpcId !== undefined) return false
+      // Older echoes can lose the rpcId: identical text close in time is a
+      // conservative fallback (fifteen minutes covers a lost-response retry).
+      return normalize(echo.text) === normalize(item.text)
+        && Math.abs((echo.createdAt ?? 0) - (item.createdAt ?? 0)) <= 15 * 60_000
+    })
+  })
+  return next.length === items.length ? items : next
+}
+
+
 /** Fold a native history event window into ordered chat items. */
 export function foldHistory(events: HistoryEntry[], sessionId: string, captureContext = false): ChatItem[] {
   let items: ChatItem[] = []
@@ -113,7 +143,7 @@ function applyNativeEvent(
     : reduceNativeEvent(current, event, sessionId, view)
   const time = typeof event.time === 'number' && Number.isFinite(event.time) && event.time > 0 ? event.time : undefined
   const usage = nativeUsage(event.data)
-  return next.map(item => {
+  const adjusted = next.map(item => {
     if (current.includes(item)) return item
     const previous = current.find(old => old.id === item.id)
     const previousSeq = previous?.nativeRevisionSeq ?? previous?.nativeSeq
@@ -128,6 +158,11 @@ function applyNativeEvent(
       ...(item.kind === 'message' && usage !== undefined ? { usage } : {}),
     }
   })
+  // A delivered user echo can reach the client without the request id (older
+  // Host projections), so it cannot replace the optimistic row. The failed copy
+  // then sits at the bottom forever although the prompt already ran; prune it
+  // the moment the authoritative echo lands.
+  return event.type === 'user/message' ? pruneDeliveredLocalDuplicates(adjusted) : adjusted
 }
 
 /** Best-effort Host failure detail from the official turn/end reason shape. */
