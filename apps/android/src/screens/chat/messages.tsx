@@ -18,7 +18,6 @@ import {
 } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
-import Svg, { Path } from 'react-native-svg'
 import { strings as zhCN } from '../../locales/i18n'
 import { foldHistory, hasVisibleMessageText } from '../../state/event-reducer'
 import { readToolHistoryDetail, useAppStore } from '../../state/store'
@@ -35,7 +34,6 @@ import type {
   ToolDisplayDetail,
 } from '../../types'
 import { Button, IconButton } from '../../ui/components'
-import { FISH_LOGO_PATH, FISH_LOGO_VIEWBOX } from '../../ui/fish-logo'
 import { NativeMarkdown, useMarkdownLink } from '../../ui/markdown'
 import { parseMessageQuotes, QuoteMarkIcon, QuotePreview } from '../../ui/quote-preview'
 import { PresentedFileGroup } from '../../ui/file-card'
@@ -452,7 +450,7 @@ function UserRowDelete({ itemId }: { itemId: string }) {
 
 const localUserRowStyles = StyleSheet.create({
   outcome: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, alignSelf: 'flex-end' },
-  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 6, minHeight: 28 },
   resendWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', alignSelf: 'flex-end', gap: 6, flexWrap: 'wrap' },
   clearAll: { paddingHorizontal: 8, paddingVertical: 3, minHeight: 22, justifyContent: 'center' },
   clearAllText: { fontSize: 12, lineHeight: 16 },
@@ -570,7 +568,7 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
             )}
           </View>
         ) : (
-          hasVisibleMessageText(body) && <NativeMarkdown text={body} />
+          hasVisibleMessageText(body) && <Text selectable style={styles.userMessageInlineText}>{body}</Text>
         )}
       </View>
       {item.sendState === 'canceled'
@@ -981,23 +979,14 @@ const localQueueStyles = StyleSheet.create({
 })
 
 export function WelcomeMessage() {
-  const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const { width } = useWindowDimensions()
+  // Official empty state is one centered greeting: no logo, no badge, no slogan.
   return (
-    <View style={styles.welcome}>
-      <Svg
-        width={64}
-        height={(64 * FISH_LOGO_VIEWBOX.height) / FISH_LOGO_VIEWBOX.width}
-        viewBox={`0 0 ${FISH_LOGO_VIEWBOX.width} ${FISH_LOGO_VIEWBOX.height}`}
-      >
-        <Path d={FISH_LOGO_PATH} fill={colors.ink} />
-      </Svg>
-      <View style={styles.welcomeRow}>
-        <Text style={styles.welcomeSlogan}>{zhCN.chat.welcomeSlogan}</Text>
-        <View style={styles.welcomeBadge}>
-          <Text style={styles.welcomeBadgeText}>{zhCN.chat.welcomeBadge}</Text>
-        </View>
-      </View>
+    <View style={styles.welcome} accessibilityRole="header">
+      <Text style={[styles.welcomeGreeting, width >= 440 && styles.welcomeGreetingWide]}>
+        {zhCN.chat.welcomeGreeting}
+      </Text>
     </View>
   )
 }

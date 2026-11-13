@@ -181,7 +181,7 @@ export function TopBar({
         <View
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: scheme === 'dark' ? 'rgba(11, 13, 17, 0.72)' : 'rgba(248, 248, 248, 0.85)' }
+            { backgroundColor: scheme === 'dark' ? 'rgba(21, 21, 23, 0.72)' : 'rgba(255, 255, 255, 0.85)' }
           ]}
           pointerEvents="none"
         />

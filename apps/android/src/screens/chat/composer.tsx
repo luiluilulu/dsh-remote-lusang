@@ -100,7 +100,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
         <Pressable accessibilityRole="button" accessibilityLabel={strings.chat.stop} disabled={stopping}
           accessibilityState={{ disabled: stopping, busy: stopping }} onPress={onStop}
           style={({ pressed }) => [styles.stopButton, pressed && !stopping && styles.stopPressed]}>
-          {stopping ? <ActivityIndicator size="small" color={colors.onInverse} /> : <CircleStop size={20} color={colors.onInverse} />}
+          {stopping ? <ActivityIndicator size="small" color={colors.white} /> : <CircleStop size={20} color={colors.white} />}
         </Pressable>
       </View> : <View style={styles.composerCard}>
         {draft.length > 0 && !compactRunning && onOpenExpand !== undefined && (
@@ -193,8 +193,8 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
               style={({ pressed }) => [styles.stopButton, pressed && !stopping && styles.stopPressed, stopping && styles.sendDisabled]}
             >
               {stopping
-                ? <ActivityIndicator size="small" color={colors.onInverse} />
-                : <CircleStop size={20} color={colors.onInverse} />}
+                ? <ActivityIndicator size="small" color={colors.white} />
+                : <CircleStop size={20} color={colors.white} />}
             </Pressable>
             : <>
               {/* With text in the composer the primary action is the send
@@ -212,7 +212,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
                 >
                   {stopping
                     ? <ActivityIndicator size="small" color={colors.white} />
-                    : <CircleStop size={17} color={colors.onInverse} />}
+                    : <CircleStop size={17} color={colors.white} />}
                 </Pressable>
               )}
               <Pressable
@@ -223,7 +223,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
                 onPress={onSubmit}
                 style={({ pressed }) => [styles.sendButton, pressed && styles.sendPressed, sendDisabled && styles.sendDisabled]}
               >
-                <ArrowUp size={20} color={sendDisabled ? colors.subtle : colors.white} strokeWidth={2.4} />
+                <ArrowUp size={18} color={colors.white} strokeWidth={2.4} />
               </Pressable>
             </>}
         </View>

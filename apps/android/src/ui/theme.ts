@@ -60,27 +60,37 @@ export interface ThemeColors {
   modalBackdrop: string
   menuDismiss: string
   shadow: string
+  /** Full-bleed conversation canvas; official chat screens paint a pure canvas fill. */
+  chatCanvas: string
+  /** Right-aligned user message bubble fill (official blue-50 in light). */
+  chatBubble: string
+  /** Composer card fill (official input-major token). */
+  composerFill: string
+  /** 1px outline used by the composer and other official cards. */
+  hairline: string
+  /** Supporting caption text such as the composer disclaimer (official label-tertiary). */
+  faint: string
 }
 
-// DeepSeek palette: ink #0F0F0F, DeepSeek blue (#4D6BFE) accents, white cards (#FFFFFF)
-// on a soft canvas (#F8F8F8) with #EDEDED hairline dividers and #59606D readable muted text.
+// DeepSeek palette: ink #0F1115, DeepSeek blue (#3964FE) accents, white cards on the
+// official #F9FAFB canvas with rgba(0,0,0,.10) hairlines and #61666B readable muted text.
 export const lightColors: ThemeColors = {
-  background: '#F8F8F8',
+  background: '#FFFFFF',
   surface: '#FFFFFF',
   card: '#FFFFFF',
   cardOpaque: '#FFFFFF',
-  surfaceStrong: '#ECEFF4',
-  grouped: '#FFFFFF',
+  surfaceStrong: '#F1F3F5',
+  grouped: '#F9FAFB',
   elevated: '#FFFFFF',
-  ink: '#0F0F0F',
-  muted: '#59606D',
-  subtle: '#B9B9BB',
-  primary: '#4D6BFE',
-  primaryPressed: '#3A56E6',
-  primarySoft: '#EBEFFF',
-  accent: '#4D6BFE',
-  accentSoft: '#EBEFFF',
-  inverse: '#0F0F0F',
+  ink: '#0F1115',
+  muted: '#61666B',
+  subtle: '#ADB2B8',
+  primary: '#3964FE',
+  primaryPressed: '#2F55E8',
+  primarySoft: '#EDF3FE',
+  accent: '#3964FE',
+  accentSoft: '#EDF3FE',
+  inverse: '#0F1115',
   onInverse: '#FFFFFF',
   success: '#1E8449',
   successSoft: '#E2F3E9',
@@ -92,44 +102,54 @@ export const lightColors: ThemeColors = {
   separator: '#EDEDED',
   disabled: '#B3B9C4',
   white: '#FFFFFF',
-  scrim: 'rgba(15, 15, 15, 0.40)',
-  modalBackdrop: 'rgba(15, 15, 15, 0.42)',
-  menuDismiss: 'rgba(15, 15, 15, 0.14)',
+  scrim: 'rgba(15, 17, 21, 0.40)',
+  modalBackdrop: 'rgba(15, 17, 21, 0.42)',
+  menuDismiss: 'rgba(15, 17, 21, 0.14)',
   shadow: '#1A2638',
+  chatCanvas: '#FFFFFF',
+  chatBubble: '#EDF3FE',
+  composerFill: '#FFFFFF',
+  hairline: 'rgba(0, 0, 0, 0.10)',
+  faint: '#81858C',
 }
 
 export const darkColors: ThemeColors = {
-  background: '#0B0D11',
-  surface: '#161A21',
-  card: 'rgba(255, 255, 255, 0.05)',
-  cardOpaque: '#17191D',
-  surfaceStrong: '#232832',
-  grouped: 'rgba(255, 255, 255, 0.05)',
-  elevated: '#1D222B',
-  ink: '#F2F4F7',
-  muted: '#A2A9B6',
-  subtle: '#7A8291',
-  primary: '#6F89FF',
-  primaryPressed: '#5672F5',
-  primarySoft: '#19213F',
-  accent: '#6F89FF',
-  accentSoft: '#19213F',
-  inverse: '#F2F4F7',
-  onInverse: '#0B0D11',
-  success: '#4CC07D',
-  successSoft: '#122A1D',
-  warning: '#E0A53A',
-  warningSoft: '#2C2312',
-  danger: '#F2736C',
+  background: '#151517',
+  surface: '#2C2C2E',
+  card: 'rgba(255, 255, 255, 0.06)',
+  cardOpaque: '#2C2C2E',
+  surfaceStrong: '#353638',
+  grouped: 'rgba(255, 255, 255, 0.06)',
+  elevated: '#353638',
+  ink: '#F9FAFB',
+  muted: '#CFD3D6',
+  subtle: '#81858C',
+  primary: '#3964FE',
+  primaryPressed: '#5686FE',
+  primarySoft: '#283142',
+  accent: '#679EFE',
+  accentSoft: '#283142',
+  inverse: '#F9FAFB',
+  onInverse: '#151517',
+  success: '#4ED17E',
+  successSoft: '#233C2C',
+  warning: '#F7AD31',
+  warningSoft: '#27241F',
+  danger: '#F25A5A',
   dangerSoft: '#2E1618',
-  border: '#2B313C',
-  separator: '#252B35',
+  border: 'rgba(255, 255, 255, 0.10)',
+  separator: 'rgba(255, 255, 255, 0.08)',
   disabled: '#4E5562',
   white: '#FFFFFF',
   scrim: 'rgba(0, 0, 0, 0.58)',
   modalBackdrop: 'rgba(0, 0, 0, 0.62)',
   menuDismiss: 'rgba(0, 0, 0, 0.45)',
   shadow: '#000000',
+  chatCanvas: '#151517',
+  chatBubble: '#2C2C2E',
+  composerFill: '#2C2C2E',
+  hairline: 'rgba(0, 0, 0, 0.10)',
+  faint: '#81858C',
 }
 
 export function colorsForScheme(scheme: ColorScheme): ThemeColors {
@@ -163,6 +183,17 @@ export function floatingShadow(colors: { shadow: string }, strength: 'low' | 'hi
   return strength === 'high'
     ? { shadowColor: colors.shadow, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6 }
     : { shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 }
+}
+
+/** Official composer lift: barely visible, wide and soft rather than a hard drop shadow. */
+export function composerShadow(colors: { shadow: string }) {
+  return {
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 1,
+  }
 }
 
 /** Soft brand glow for prominent floating call-to-action pills (e.g. create session). */
