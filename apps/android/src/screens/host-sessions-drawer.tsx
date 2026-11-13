@@ -171,7 +171,7 @@ export function HostSessionsDrawer({
   onOpenWorkspaces,
   onOpenDeviceInfo,
   onSelect,
-  onNewSession: _onNewSession,
+  onNewSession: handleNewSession,
   onOpenAutomationTasks,
   onOpenPlugins,
   onOpenHostSwitcher,
@@ -786,9 +786,11 @@ export function HostSessionsDrawer({
     return [...recentSections, ...treeSections]
   }, [groupBy, backendWorkspaces, backend, filteredSessions, recentIds, selected, expandedWorkspaces, visibleCounts, language, pinnedSessionIds, archivedIds, orderBy, manualOrders, searchQuery])
 
-  // 手势与抽屉动画
+  // 手势与抽屉动画：官方手机抽屉宽 300，窄屏按 100vw-48 收窄
   const { width: screenWidth } = useWindowDimensions()
-  const drawerWidth = Math.round(screenWidth * DRAWER_WIDTH_RATIO)
+  const drawerWidth = inline
+    ? Math.round(screenWidth * DRAWER_WIDTH_RATIO)
+    : Math.min(300, Math.round(screenWidth - 48))
   const translateX = useRef(new Animated.Value(-drawerWidth)).current
   const overlayOpacity = useRef(new Animated.Value(0)).current
   const dragStartX = useRef(0)
@@ -1023,9 +1025,6 @@ export function HostSessionsDrawer({
             <Path d={FISH_LOGO_PATH} fill={colors.ink} />
           </Svg>
           <Text style={styles.brandTitle} numberOfLines={1}>deepseek</Text>
-          <View style={styles.brandBadge}>
-            <Text style={styles.brandBadgeText}>HARNESS</Text>
-          </View>
         </Pressable>
         <View style={styles.brandRight}>
           <Pressable
@@ -1044,6 +1043,22 @@ export function HostSessionsDrawer({
           )}
         </View>
       </View>
+
+      {/* 官方样式：品牌行下方的全宽「新对话」胶囊（沿用既有 onNewSession prop，仅智能体模式） */}
+      {handleNewSession !== undefined && drawerMode === 'agent' && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={strings.chat.newChat}
+          onPress={() => {
+            Keyboard.dismiss()
+            void handleNewSession()
+          }}
+          style={({ pressed }) => [styles.newChatButton, pressed && styles.pressedFade]}
+        >
+          <Plus size={16} color={colors.ink} strokeWidth={2} />
+          <Text style={styles.newChatText}>{strings.chat.newChat}</Text>
+        </Pressable>
+      )}
 
       {!connected && error !== undefined && (
         <ErrorBanner
@@ -1260,7 +1275,7 @@ export function HostSessionsDrawer({
                     styles.workspaceRow,
                     hasItems ? styles.workspaceRowCardTop : styles.workspaceRowCardSingle,
                     pressed && styles.pressedBg,
-                    depth > 0 && { paddingLeft: spacing.md + depth * 14 },
+                    depth > 0 && { paddingLeft: 10 + depth * 14 },
                   ]}
                 >
                   <View style={styles.workspaceRowLeft}>
@@ -1327,7 +1342,7 @@ export function HostSessionsDrawer({
               }
               style={[
                 styles.showMoreRow,
-                depth > 0 && { paddingLeft: spacing.lg + spacing.md + depth * 14 },
+                depth > 0 && { paddingLeft: 24 + depth * 14 },
               ]}
             >
               <Text style={styles.showMoreText}>{strings.sessions.showMoreSessions(remaining)}</Text>
@@ -1390,7 +1405,7 @@ export function HostSessionsDrawer({
                 if (!dragActiveRef.current || !dragState || dragState.sessionId !== item.sessionId) return
                 const currentY = e.nativeEvent.pageY
                 const dy = currentY - touchStartY.current
-                const rowHeight = 46
+                const rowHeight = 36
                 const deltaSlots = Math.round(dy / rowHeight)
                 const pinnedCount = section.data.filter(s => {
                   const isH = (s.backend ?? 'harness') === 'harness'
@@ -1446,7 +1461,7 @@ export function HostSessionsDrawer({
                 styles.sessionRow,
                 isFirstInList && styles.sessionRowCardTop,
                 isLastInCard && styles.sessionRowCardBottom,
-                depth > 0 && { paddingLeft: spacing.lg + spacing.xs + depth * 14 },
+                depth > 0 && { paddingLeft: 10 + depth * 14 },
                 isSelected && styles.sessionRowSelected,
                 pressed && styles.pressedBg,
                 isDragging && styles.sessionRowDragging,
@@ -1944,7 +1959,7 @@ export function HostSessionsDrawer({
         <Animated.View
           accessibilityViewIsModal
           {...drawerTouchProps}
-          style={[styles.drawer, { paddingTop: insets.top, paddingBottom: insets.bottom, transform: [{ translateX }] }]}
+          style={[styles.drawer, { width: drawerWidth, paddingTop: insets.top, paddingBottom: insets.bottom, transform: [{ translateX }] }]}
         >
           {content}
         </Animated.View>
@@ -1957,37 +1972,37 @@ const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlayContainer: { flex: 1 },
     overlay: { flex: 1, backgroundColor: colors.scrim },
-    drawer: { flex: 1, width: '100%', maxWidth: '100%', backgroundColor: colors.background, overflow: 'hidden' },
-    inlineDrawer: { width: '100%', maxWidth: '100%', borderRadius: 0, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.separator },
+    drawer: { flex: 1, width: 300, maxWidth: 320, backgroundColor: colors.sidebarFill, overflow: 'hidden' },
+    inlineDrawer: { width: '100%', maxWidth: '100%', borderRadius: 0, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.sidebarBorder },
     container: { flex: 1 },
 
     brandHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingLeft: spacing.lg,
-      paddingRight: spacing.md,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.md,
+      paddingLeft: spacing.md,
+      paddingRight: spacing.xs,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
     },
     brandLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0, marginRight: spacing.sm, gap: 6 },
-    brandTitle: { ...type.heading, fontSize: 19, lineHeight: 23, fontWeight: '800', letterSpacing: -0.4, color: colors.ink },
-    brandBadge: {
-      backgroundColor: colors.ink,
-      paddingHorizontal: 5,
-      paddingVertical: 1.5,
-      borderRadius: 4,
-    },
-    brandBadgeText: {
-      color: colors.background,
-      fontSize: 10,
-      lineHeight: 12,
-      fontWeight: '800',
-      letterSpacing: 0.5,
-    },
+    brandTitle: { ...type.heading, fontSize: 20, lineHeight: 22, fontWeight: '600', letterSpacing: -0.3, color: colors.primary },
     brandRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     iconBtn: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-    iconBtnRound: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.elevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, ...floatingShadow(colors) },
+    iconBtnRound: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+    newChatButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 40,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: 100,
+      backgroundColor: colors.sidebarActionFill,
+      ...floatingShadow(colors),
+    },
+    newChatText: { ...type.small, fontSize: 14, lineHeight: 20, fontWeight: '500', color: colors.ink },
 
     navItem: {
       flexDirection: 'row',
@@ -2046,12 +2061,12 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingLeft: spacing.lg,
+      paddingLeft: spacing.md,
       paddingRight: spacing.sm,
-      paddingTop: spacing.md,
+      paddingTop: spacing.sm,
       paddingBottom: spacing.xxs,
     },
-    workspacesTitle: { ...type.small, fontSize: 15, color: colors.muted },
+    workspacesTitle: { ...type.caption, fontSize: 12, lineHeight: 18, fontWeight: '500', color: colors.sidebarSection },
     toolbarActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 
     searchContainer: {
@@ -2061,77 +2076,65 @@ const createStyles = (colors: ThemeColors) =>
       marginHorizontal: spacing.md,
       marginBottom: spacing.xs,
       paddingHorizontal: spacing.md,
-      height: 42,
+      height: 40,
       borderRadius: radius.pill,
       backgroundColor: colors.surfaceStrong,
     },
-    searchInput: { flex: 1, ...type.body, fontSize: 15, color: colors.ink, paddingVertical: 0 },
+    searchInput: { flex: 1, ...type.body, fontSize: 14, lineHeight: 20, color: colors.ink, paddingVertical: 0 },
 
     listContainer: { paddingBottom: spacing.xl },
 
-    // 底部常驻栏：左侧当前远程主机状态/切换入口，右侧唯一设置圆钮
+    // 底部常驻栏：官方侧栏底部的「设置」行样式（主机状态 + 设置圆钮）
     hostFooterBar: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.separator,
-      backgroundColor: colors.background,
+      borderTopColor: colors.sidebarBorder,
+      backgroundColor: colors.sidebarFill,
       paddingLeft: spacing.xs,
-      paddingRight: spacing.md,
-      paddingVertical: 10,
+      paddingRight: spacing.xs,
+      paddingVertical: spacing.xs,
     },
     hostFooterLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 14,
+      gap: 10,
       flex: 1,
       minWidth: 0,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 6,
-      borderRadius: radius.lg,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: radius.md,
     },
     hostFooterIcon: { width: 20, alignItems: 'center', justifyContent: 'center' },
     hostFooterInfo: { flex: 1, minWidth: 0, gap: 2 },
     hostFooterNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
-    hostFooterName: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: colors.ink, flexShrink: 1 },
+    hostFooterName: { ...type.smallStrong, fontSize: 14, lineHeight: 20, color: colors.ink, flexShrink: 1 },
     hostFooterStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     hostFooterDot: { width: 6, height: 6, borderRadius: 3 },
     hostFooterStatusText: { ...type.caption, color: colors.muted },
     sectionList: { flex: 1 },
 
+    // 官方侧栏行是扁平列表：取消卡片背景/描边/外边距，仅保留圆角与按下反馈
     workspaceRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.md,
-      minHeight: 48,
-      marginHorizontal: spacing.md,
-      marginTop: spacing.xs,
-      backgroundColor: colors.card,
-      borderColor: colors.separator,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderRightWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: 10,
+      minHeight: 36,
+      marginHorizontal: spacing.xs,
+      marginTop: 2,
+      borderRadius: radius.sm,
     },
-    workspaceRowCardSingle: {
-      borderRadius: radius.xl,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    workspaceRowCardTop: {
-      borderTopLeftRadius: radius.xl,
-      borderTopRightRadius: radius.xl,
-    },
-    workspaceRowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 },
-    workspaceRowTitle: { ...type.bodyStrong, fontSize: 15, color: colors.ink, flexShrink: 1 },
+    workspaceRowCardSingle: {},
+    workspaceRowCardTop: {},
+    workspaceRowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1, minWidth: 0 },
+    workspaceRowTitle: { ...type.smallStrong, fontSize: 14, lineHeight: 20, fontWeight: '500', color: colors.ink, flexShrink: 1 },
     workspaceCountText: {
       ...type.caption,
       fontSize: 12,
-      color: colors.muted,
-      backgroundColor: colors.surfaceStrong,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: radius.pill,
+      color: colors.sidebarSection,
+      paddingHorizontal: 4,
     },
     workspaceRowRight: {
       flexDirection: 'row',
@@ -2150,30 +2153,18 @@ const createStyles = (colors: ThemeColors) =>
     sessionRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingLeft: spacing.md,
+      paddingLeft: 8,
       paddingRight: spacing.xxs,
-      minHeight: 46,
-      marginHorizontal: spacing.md,
-      backgroundColor: colors.card,
-      borderColor: colors.separator,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderRightWidth: StyleSheet.hairlineWidth,
+      minHeight: 36,
+      marginHorizontal: spacing.xs,
+      borderRadius: radius.sm,
     },
-    sessionRowCardTop: {
-      marginTop: spacing.xs,
-      borderTopLeftRadius: radius.xl,
-      borderTopRightRadius: radius.xl,
-    },
-    sessionRowCardBottom: {
-      borderBottomLeftRadius: radius.xl,
-      borderBottomRightRadius: radius.xl,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    sessionRowSelected: { backgroundColor: colors.primarySoft },
+    sessionRowCardTop: {},
+    sessionRowCardBottom: {},
+    sessionRowSelected: { backgroundColor: colors.sidebarActive },
     sessionRowDragging: {
-      backgroundColor: colors.surfaceStrong,
-      borderRadius: radius.lg,
+      backgroundColor: colors.sidebarHover,
+      borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.primary,
       opacity: 0.9,
@@ -2186,30 +2177,23 @@ const createStyles = (colors: ThemeColors) =>
       borderBottomWidth: 2,
       borderBottomColor: colors.primary,
     },
-    statusIndicatorSlot: { width: 14, alignItems: 'flex-start', justifyContent: 'center' },
+    statusIndicatorSlot: { width: 10, alignItems: 'flex-start', justifyContent: 'center' },
     runningDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
-    sessionText: { ...type.body, fontSize: 15, color: colors.ink, flex: 1, marginRight: spacing.xs },
-    sessionTextSelected: { fontWeight: '600', color: colors.primary },
-    timeText: { ...type.caption, color: colors.subtle },
+    sessionText: { ...type.small, fontSize: 14, lineHeight: 20, color: colors.ink, flex: 1, marginRight: spacing.xs },
+    sessionTextSelected: { fontWeight: '500', color: colors.sidebarActiveText },
+    timeText: { ...type.caption, color: colors.muted },
 
     showMoreRow: {
-      paddingLeft: spacing.md + 14,
+      paddingLeft: 24,
       paddingVertical: spacing.xs,
-      minHeight: 38,
+      minHeight: 36,
       justifyContent: 'center',
-      marginHorizontal: spacing.md,
-      backgroundColor: colors.card,
-      borderColor: colors.separator,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderRightWidth: StyleSheet.hairlineWidth,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomLeftRadius: radius.xl,
-      borderBottomRightRadius: radius.xl,
+      marginHorizontal: spacing.xs,
+      borderRadius: radius.sm,
     },
     showMoreText: { ...type.caption, color: colors.primary, fontWeight: '500' },
 
-    pressedBg: { backgroundColor: colors.surfaceStrong },
+    pressedBg: { backgroundColor: colors.sidebarHover },
     pressedFade: { opacity: 0.72 },
 
     // 浮窗覆盖层：铺满抽屉内容区，作为唯一命中层，避免跨父级层级问题

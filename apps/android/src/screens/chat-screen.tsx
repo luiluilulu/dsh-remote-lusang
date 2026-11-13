@@ -722,6 +722,7 @@ export function ChatScreen({
         Keyboard.dismiss()
         onOpenSettings?.()
       }}
+      onNewSession={() => void startNewSession()}
       onSelect={async next => {
         markConversationChosen()
         onBotModeChange?.(false)
@@ -1173,8 +1174,9 @@ export function ChatScreen({
   // breadcrumb subtitle there instead.
   const header = <>
       <TopBar
-        title={sessionTitle(session)}
-        onTitlePress={() => { Keyboard.dismiss(); setMentionType(null); setSessionInfoOpen(true) }}
+        plain
+        title={sessionBlank ? '' : sessionTitle(session)}
+        onTitlePress={sessionBlank ? undefined : () => { Keyboard.dismiss(); setMentionType(null); setSessionInfoOpen(true) }}
         titleLines={1}
         onBack={tabletSplit ? undefined : trajectory ? handleBack : rootAgentSession !== undefined ? () => { Keyboard.dismiss(); void openSession(rootAgentSession) } : openSessionsDrawer}
         backIcon={trajectory ? ArrowLeft : rootAgentSession !== undefined ? ArrowLeft : Menu}
@@ -1185,7 +1187,7 @@ export function ChatScreen({
         onSubtitlePress={tabletSplit && !trajectory && rootAgentSession !== undefined
           ? () => { Keyboard.dismiss(); void openSession(rootAgentSession) }
           : undefined}
-        action={<>
+        action={sessionBlank ? undefined : <>
           <IconButton label={trajectory ? strings.trajectory.close : strings.trajectory.open}
             icon={trajectory ? MessageSquare : ListTree} dense tint={trajectory ? colors.primary : undefined}
             onPress={() => { Keyboard.dismiss(); setMentionType(null); setTrajectory(value => !value) }} />

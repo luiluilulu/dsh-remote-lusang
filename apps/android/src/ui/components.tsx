@@ -136,6 +136,7 @@ export function TopBar({
   titleLines = 1,
   titleAccessory,
   centered = false,
+  plain = false,
 }: {
   title: string
   titleAccessory?: ReactNode
@@ -149,6 +150,11 @@ export function TopBar({
   action?: ReactNode
   /** Set above 1 when the title carries structured text that may not fit one line. */
   titleLines?: number
+  /**
+   * Official chat header: opaque canvas, bare icon buttons and a 14dp medium
+   * centered title instead of floating white chips.
+   */
+  plain?: boolean
 }) {
   const insets = useSafeAreaInsets()
   const { colors, scheme } = useTheme()
@@ -161,12 +167,13 @@ export function TopBar({
     <View
       style={[
         styles.topBar,
-        { paddingTop: insets.top + spacing.xs, minHeight: 56 + insets.top },
+        { paddingTop: insets.top + (plain ? 0 : spacing.xs), minHeight: (plain ? 56 : 56) + insets.top },
         tallerBar && styles.topBarWithSubtitle,
-        blurTarget !== undefined && styles.topBarBlurred,
+        plain && styles.topBarPlain,
+        blurTarget !== undefined && !plain && styles.topBarBlurred,
       ]}
     >
-      {blurTarget !== undefined && (
+      {blurTarget !== undefined && !plain && (
         <BlurView
           blurTarget={blurTarget}
           blurMethod="dimezisBlurViewSdk31Plus"
@@ -177,7 +184,7 @@ export function TopBar({
         />
       )}
       {/* Frosted translucent backdrop (~60% opacity) matching modern iOS/assistant styling */}
-      {blurTarget !== undefined && (
+      {blurTarget !== undefined && !plain && (
         <View
           style={[
             StyleSheet.absoluteFill,
@@ -186,27 +193,29 @@ export function TopBar({
           pointerEvents="none"
         />
       )}
-      <View style={[styles.topBarSide, !!centered && { width: typeof centered === 'number' ? centered : 48 }]}>
-        {onBack !== undefined && (
-          <View style={styles.floatingChip}>
-            <FloatingChipContext.Provider value>
-              <IconButton label={backLabel ?? zhCN.common.back} icon={backIcon ?? ArrowLeft} onPress={onBack} hitSlop={8} />
-            </FloatingChipContext.Provider>
-          </View>
-        )}
+      <View style={[styles.topBarSide, plain && styles.topBarSidePlain, !!centered && { width: typeof centered === 'number' ? centered : 48 }]}>
+        {onBack !== undefined && (plain
+          ? <IconButton label={backLabel ?? zhCN.common.back} icon={backIcon ?? ArrowLeft} onPress={onBack} dense hitSlop={8} />
+          : (
+            <View style={styles.floatingChip}>
+              <FloatingChipContext.Provider value>
+                <IconButton label={backLabel ?? zhCN.common.back} icon={backIcon ?? ArrowLeft} onPress={onBack} hitSlop={8} />
+              </FloatingChipContext.Provider>
+            </View>
+          ))}
       </View>
-      <View style={styles.topBarTitles}>
+      <View style={[styles.topBarTitles, plain && styles.topBarTitlesPlain]}>
         {onTitlePress === undefined
-          ? <Text style={styles.topBarTitle} numberOfLines={titleLines} ellipsizeMode="tail">{title}</Text>
+          ? <Text style={[styles.topBarTitle, plain && styles.topBarTitlePlain]} numberOfLines={titleLines} ellipsizeMode="tail">{title}</Text>
           : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={title}
               onPress={onTitlePress}
               hitSlop={4}
-              style={({ pressed }) => [styles.topBarTitleRow, pressed && styles.iconButtonPressed]}
+              style={({ pressed }) => [styles.topBarTitleRow, plain && styles.topBarTitleRowPlain, pressed && styles.iconButtonPressed]}
             >
-              <Text style={[styles.topBarTitle, titleAccessory === undefined && styles.topBarTitleLink, { flexShrink: 1 }]} numberOfLines={titleLines} ellipsizeMode="tail">{title}</Text>
+              <Text style={[styles.topBarTitle, plain && styles.topBarTitlePlain, titleAccessory === undefined && styles.topBarTitleLink, { flexShrink: 1 }]} numberOfLines={titleLines} ellipsizeMode="tail">{title}</Text>
               {titleAccessory}
             </Pressable>
           )}
@@ -227,12 +236,14 @@ export function TopBar({
             )
         )}
       </View>
-      <View style={[styles.topBarSide, styles.topBarTrailing, !!centered && { width: typeof centered === 'number' ? centered : 48 }]}>
-        {action !== undefined && action !== null && (
-          <View style={[styles.floatingChip, styles.topBarActions]}>
-            <FloatingChipContext.Provider value>{action}</FloatingChipContext.Provider>
-          </View>
-        )}
+      <View style={[styles.topBarSide, styles.topBarTrailing, plain && styles.topBarSidePlain, !!centered && { width: typeof centered === 'number' ? centered : 48 }]}>
+        {action !== undefined && action !== null && (plain
+          ? action
+          : (
+            <View style={[styles.floatingChip, styles.topBarActions]}>
+              <FloatingChipContext.Provider value>{action}</FloatingChipContext.Provider>
+            </View>
+          ))}
       </View>
     </View>
   )
@@ -578,6 +589,12 @@ function createStyles(colors: ThemeColors) {
     frameFade: { position: 'absolute', top: '100%', left: 0, right: 0, height: spacing.lg },
     frameHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
     topBarBlurred: { backgroundColor: 'transparent', borderBottomWidth: 0 },
+    // Official chat header: opaque canvas above the conversation, no floating chips.
+    topBarPlain: { backgroundColor: colors.chatCanvas, paddingHorizontal: spacing.xs },
+    topBarSidePlain: { minWidth: 44 },
+    topBarTitlesPlain: { paddingHorizontal: 0, gap: 0 },
+    topBarTitlePlain: { fontSize: 14, lineHeight: 22, fontWeight: '500', letterSpacing: 0 },
+    topBarTitleRowPlain: { borderRadius: 8, minHeight: 40 },
     topBarWithSubtitle: { minHeight: 68, paddingVertical: spacing.sm },
     topBarSide: { minWidth: 44, flexDirection: 'row', alignItems: 'center' },
     // Floating chip: a white disc for one control, a capsule for several.

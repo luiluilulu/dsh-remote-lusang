@@ -70,6 +70,20 @@ export interface ThemeColors {
   hairline: string
   /** Supporting caption text such as the composer disclaimer (official label-tertiary). */
   faint: string
+  /** Session drawer canvas (official sidebar fill). */
+  sidebarFill: string
+  /** Session drawer divider hairline. */
+  sidebarBorder: string
+  /** Drawer row hover/pressed fill. */
+  sidebarHover: string
+  /** Selected drawer row fill. */
+  sidebarActive: string
+  /** Label color inside a selected drawer row. */
+  sidebarActiveText: string
+  /** Drawer section captions such as 今天 / 昨天 / 30 天内. */
+  sidebarSection: string
+  /** White pill that opens a new conversation inside the drawer. */
+  sidebarActionFill: string
 }
 
 // DeepSeek palette: ink #0F1115, DeepSeek blue (#3964FE) accents, white cards on the
@@ -111,6 +125,13 @@ export const lightColors: ThemeColors = {
   composerFill: '#FFFFFF',
   hairline: 'rgba(0, 0, 0, 0.10)',
   faint: '#81858C',
+  sidebarFill: '#F9FAFB',
+  sidebarBorder: 'rgba(0, 0, 0, 0.04)',
+  sidebarHover: '#F1F3F5',
+  sidebarActive: '#E4EDFD',
+  sidebarActiveText: '#3964FE',
+  sidebarSection: '#81858C',
+  sidebarActionFill: '#FFFFFF',
 }
 
 export const darkColors: ThemeColors = {
@@ -150,6 +171,13 @@ export const darkColors: ThemeColors = {
   composerFill: '#2C2C2E',
   hairline: 'rgba(0, 0, 0, 0.10)',
   faint: '#81858C',
+  sidebarFill: '#1B1B1C',
+  sidebarBorder: 'rgba(255, 255, 255, 0.04)',
+  sidebarHover: '#2C2C2E',
+  sidebarActive: '#353638',
+  sidebarActiveText: '#F9FAFB',
+  sidebarSection: '#81858C',
+  sidebarActionFill: '#2C2C2E',
 }
 
 export function colorsForScheme(scheme: ColorScheme): ThemeColors {
