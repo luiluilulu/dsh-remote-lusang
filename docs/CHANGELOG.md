@@ -1,3 +1,22 @@
+## 0.6.4-own.14 — 2026-11-14
+
+Android build 84 (arm64 trial APK). Fork release built on upstream 0.6.3.
+
+### English
+
+- Official DeepSeek App look across the Android client: brand palette and type scale, single-line greeting, card composer, rounded user bubbles, flat drawer and settings, official Markdown typography, and flat Bot mode, plugins, automation and device-list pages.
+- Voice input: the phone records a 16 kHz WAV and the computer transcribes it with the Harness speech model, then fills the composer draft.
+- Read aloud, image text recognition, link summaries and web search run on the computer and only return text or audio to the phone. Speech synthesis and OCR use Windows local services; web search uses a provider key stored only on the PC.
+- New: in-app update version parser also understands patch builds (`-own.N.M`).
+- Fix: the battery optimization row now always opens a system page instead of silently doing nothing.
+
+### 中文
+
+- Android 客户端按官方 DeepSeek App 重做视觉：品牌色板与字号层级、单行问候、卡片式输入区、圆角用户气泡、扁平侧栏与设置、官方 Markdown 字号，以及扁平的 Bot 模式、插件、自动化与设备列表页面。
+- 语音输入：手机录 16 kHz WAV，由电脑端使用 Harness 语音模型识别后回填输入框。
+- 朗读、图片取字、链接总结与网页搜索都在电脑端执行，只把文字或音频返回手机；语音合成与 OCR 使用 Windows 本地能力，网页搜索使用只保存在电脑端的供应商密钥。
+- 应用内更新的版本解析支持补丁版本号（`-own.N.M`）。
+- 修复：电池优化行现在一定会打开系统页面，不再出现点击无反应的情况。
 ## 0.6.3 — 2026-11-05
 
 Android build 71.

@@ -84,27 +84,30 @@ export async function fetchLatestRelease(
   return undefined
 }
 
-type ParsedVersion = { base: number[]; own: number }
+type ParsedVersion = { base: number[]; own: number; patch: number }
 
 /**
- * Parse `0.6.4`, `v0.6.4`, `0.6.4-own.9`, `0.6.4-own.9+build`. A missing
- * `-own.N` suffix counts as own build 0 so upstream's plain `0.6.4` is never
- * newer than our suffixed builds, while `own.10 > own.9` still works.
+ * Parse `0.6.4`, `v0.6.4`, `0.6.4-own.9`, `0.6.4-own.9.2`, `0.6.4-own.9+build`.
+ * A missing `-own.N` suffix counts as own build 0 so upstream's plain `0.6.4`
+ * is never newer than our suffixed builds, while `own.10 > own.9` still works.
  */
 function parseVersion(value: string): ParsedVersion | null {
-  const match = /^\s*v?(\d+(?:\.\d+)*)(?:-own\.(\d+))?/i.exec(value)
+  const match = /^\s*v?(\d+(?:\.\d+)*)(?:-own\.(\d+)(?:\.(\d+))?)?/i.exec(value)
   const raw = match?.[1]
   if (raw === undefined) return null
   const base = raw.split('.').map(Number)
   if (base.length === 0 || !base.every(part => Number.isFinite(part))) return null
   const own = match?.[2] === undefined ? 0 : Number(match[2])
   if (!Number.isFinite(own)) return null
-  return { base, own }
+  const patch = match?.[3] === undefined ? 0 : Number(match[3])
+  if (!Number.isFinite(patch)) return null
+  return { base, own, patch }
 }
 
 /**
  * True only when `latest` is a strictly newer release for this fork: compare
- * the numeric core first, then the `-own.N` counter when the core is equal.
+ * the numeric core first, then the `-own.N` counter and finally the patch
+ * suffix (`-own.N.M`) when the core and counter are equal.
  * An unparseable installed version is treated as "unknown, offer the update".
  */
 export function isNewerVersion(latest: string, current: string): boolean {
@@ -119,5 +122,6 @@ export function isNewerVersion(latest: string, current: string): boolean {
     if (a > b) return true
     if (a < b) return false
   }
-  return next.own > installed.own
+  if (next.own !== installed.own) return next.own > installed.own
+  return next.patch > installed.patch
 }

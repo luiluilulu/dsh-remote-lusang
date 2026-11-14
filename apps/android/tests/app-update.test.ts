@@ -28,6 +28,13 @@ describe('fork update channel', () => {
       ['0.6.4-own.9', '0.6.3', true],
       ['0.6.4', '0.6.4', false],
       ['0.6.4-own.2', '0.6.4-own.10', false],
+      // Patch builds (`-own.N.M`) order inside the same own counter.
+      ['0.6.4-own.13.1', '0.6.4-own.13', true],
+      ['0.6.4-own.13.1', '0.6.4-own.13.0', true],
+      ['0.6.4-own.13.2', '0.6.4-own.13.1', true],
+      ['0.6.4-own.13.1', '0.6.4-own.14', false],
+      ['0.6.4-own.14', '0.6.4-own.13.1', true],
+      ['v0.6.4-own.13.1', '0.6.4-own.13.1', false],
       ['not-a-version', '0.6.4-own.9', false],
       // An unparseable installed version should still offer the update.
       ['0.6.4-own.9', '', true],
