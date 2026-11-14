@@ -298,36 +298,6 @@ export class AndroidRemoteConnection {
     return this.core.rpc<T>(method, params, signal)
   }
 
-  /** The connected Host advertises the official experimental speech namespace. */
-  supportsVoiceInput(): boolean {
-    return this.core !== undefined && this.speechSupported
-  }
-
-  /**
-   * Transcribe one canonical base64 WAV through the Host's official speech
-   * Remote namespace. Large recordings automatically use the gateway transfer
-   * path, so the phone never needs an API key and audio stays on the computer.
-   */
-  async transcribeVoice(audioBase64: string, language: string | undefined, signal?: AbortSignal): Promise<string> {
-    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
-    if (!this.speechSupported) throw new Error(strings.chat.voiceUnavailable)
-    const args: Record<string, unknown> = { audioBase64 }
-    if (language !== undefined && language !== '') args.language = language
-    const value = await new RemoteTypertGateway(this.core).call<unknown>(
-      'speech/transcribe',
-      // Typert maps `args` entries to the method parameters by name; the
-      // controller signature is `transcribe(request, signal)`.
-      { args: { request: args } },
-      signal,
-      { maxResponseBytes: 4 * 1024 * 1024 },
-    )
-    const text = typeof value === 'object' && value !== null && 'text' in value
-      ? (value as { text?: unknown }).text
-      : undefined
-    if (typeof text !== 'string' || text.trim() === '') throw new Error(strings.chat.voiceEmpty)
-    return text.trim()
-  }
-
   /** The connected Host announces the Windows-local TTS/OCR app APIs. */
   supportsAppApis(): boolean {
     return this.core !== undefined && this.appApiSupported

@@ -97,7 +97,6 @@ import { useChatMentions } from './chat/use-chat-mentions'
 import { useChatPrompts } from './chat/use-chat-prompts'
 import { useChatScroll } from './chat/use-chat-scroll'
 import { useChatTranscript } from './chat/use-chat-transcript'
-import { useVoiceInput } from './chat/use-voice-input'
 import { useLiveSessionStatus } from './device-screens'
 import { BotModeScreen } from './bot-mode-screen'
 import { HostSessionsDrawer } from './host-sessions-drawer'
@@ -224,20 +223,6 @@ export function ChatScreen({
     setPermissionPickerOpen, setModelPickerOpen,
   })
   const { composerInputRef, draftRef, mentionType, setMentionType, applyDraft, closeMention, resetSelection } = mentionInput
-  // The phone only records; the computer transcribes through the official
-  // experimental speech namespace, so the entry exists for Harness sessions only.
-  const harnessVoice = (session?.backend ?? 'harness') === 'harness'
-  const voice = useVoiceInput({
-    enabled: connection.phase === 'connected' && harnessVoice,
-    onTranscript: text => {
-      const current = draftRef.current
-      applyDraft(current === '' ? text : `${current} ${text}`)
-    },
-    onError: message => Alert.alert(strings.chat.voiceInput, message),
-  })
-  useEffect(() => {
-    void voice.cancel()
-  }, [session?.sessionId, voice.cancel])
 
   // "取字": the computer runs Windows OCR; the recognized text lands in the
   // composer draft, never sent automatically.
@@ -1451,13 +1436,6 @@ export function ChatScreen({
           composerDisabled={composerDisabled} sendDisabled={sendDisabled}
           compactComposer={compactComposer} composerInputMaxHeight={composerInputMaxHeight}
           model={{ available: sessionModels !== undefined, label: currentModelLabel, selecting: modelSelecting, onOpen: () => setModelPickerOpen(true) }}
-          voice={{
-            available: connected && harnessVoice && voice.available,
-            phase: voice.phase,
-            elapsedMs: voice.elapsedMs,
-            onToggle: () => void voice.toggle(),
-            onCancel: () => void voice.cancel(),
-          }}
           promptsPickerOpen={promptsPickerOpen} onExpand={() => setComposingDuringRun(true)}
           onOpenExpand={() => setComposerExpanded(true)}
           onOpenActions={openPlusMenu} onOpenPrompts={openPromptsPicker}

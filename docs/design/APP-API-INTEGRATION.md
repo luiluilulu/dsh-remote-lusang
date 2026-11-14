@@ -1,13 +1,13 @@
 # DeepSeek「全家桶应用 API」接入设计（B 线 recon + MVP 拆分）
 
-状态：recon 完成，MVP-0（ASR）已落地，MVP-1 起待实现。
+状态：recon 完成，MVP-0–MVP-3 均已实现；ASR 客户端入口已在 `0.6.4-own.14.1` 移除（识别质量不达标），Host 侧放行保留。
 日期：2026-11-14。相关代码：`packages/plugin/src/`、`apps/android/src/services/`。
 
 ## 1. 目标与约束
 
 手机端只提供入口，**能力全部在电脑端执行**：
 
-- ASR 语音输入（已实现）、TTS 朗读、OCR 取字、Search/Fetch（链接总结）。
+- ASR 语音输入（曾实现，`own.14.1` 移除客户端入口，待重做）、TTS 朗读、OCR 取字、Search/Fetch（链接总结）。
 - API key 只存电脑端（Host 插件设置），**手机不落地 key**，任何日志/响应不得回显 key。
 - 不新增通用 HTTP 代理、任意文件读写或远程桌面；沿用既有加密 Remote 通道与 base64/transfer 传输。
 
@@ -15,7 +15,7 @@
 
 | 能力 | 电脑端现状 | 结论 |
 | --- | --- | --- |
-| ASR | DSH 自带官方实验命名空间 `@deepseek-ai/dsh-experimental-api-speech-to-text`（`speech/transcribe`，canonical base64 WAV，4 MiB / 120 s，SenseVoice 本地识别，无 key） | 已接入：Host allowlist + `speech.remote.v1` 能力；Android 原生录 16 kHz mono PCM16 WAV 回填草稿 |
+| ASR | DSH 自带官方实验命名空间 `@deepseek-ai/dsh-experimental-api-speech-to-text`（`speech/transcribe`，canonical base64 WAV，4 MiB / 120 s，SenseVoice 本地识别，无 key） | 链路已打通（Host allowlist + `speech.remote.v1` + Android 录音），但识别体验不达标，`own.14.1` 移除客户端入口；Host 侧保留 |
 | TTS | DSH 安装包内无 TTS Remote 命名空间；Windows 本机 `powershell.exe` + `System.Speech` 实测可用（Huihui zh-CN / Zira en-US，输出 WAV） | 自建 Host 端点 + Windows SAPI（离线、无 key） |
 | OCR | 无官方 Remote API；`Windows.Media.Ocr` 实测可用（en-US、zh-Hans-CN） | 自建 Host 端点 + WinRT OCR（离线、无 key） |
 | Fetch | 无官方 Remote API；DSH 的 `web_fetch` 是 Agent 工具而非 Remote 端点 | 自建 Host 端点，Node `fetch` + 正文提取（无 key） |

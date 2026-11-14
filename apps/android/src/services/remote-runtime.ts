@@ -68,10 +68,6 @@ export class AndroidRemoteRuntime {
   requireBotClient() { return this.client.requireBotClient() }
   requireCodex() { return this.client.requireCodex() }
   requireSessionTools(sessionId?: string) { return this.client.requireSessionTools(sessionId) }
-  supportsVoiceInput() { return this.client.supportsVoiceInput() }
-  transcribeVoice(audioBase64: string, language: string | undefined, signal?: AbortSignal) {
-    return this.client.transcribeVoice(audioBase64, language, signal)
-  }
   supportsAppApis() { return this.client.supportsAppApis() }
   synthesizeSpeech(text: string, options: { voice?: string; rate?: number } = {}, signal?: AbortSignal) {
     return this.client.synthesizeSpeech(text, options, signal)

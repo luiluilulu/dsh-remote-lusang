@@ -6,7 +6,7 @@
 
 ## 当前焦点（2026-11-14）
 
-- **B 线（官方能力接入）**：ASR 语音输入已落地（未发版）。Host 放行官方
+- **B 线（官方能力接入）**：ASR 语音输入曾实现但体验不达标，`0.6.4-own.14.1` 已移除 Android 入口（Host 侧放行保留）。Host 放行官方
   `@deepseek-ai/dsh-experimental-api-speech-to-text` 命名空间，并在组合中存在 `speechController`
   时通过 `hostCapabilities()` 宣告 `speech.remote.v1`；Android 原生
   `plugins/remote-foreground-service/RemoteAudioRecorderModule.kt`（`DshRemoteAudioRecorder`）

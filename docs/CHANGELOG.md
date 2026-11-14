@@ -1,3 +1,17 @@
+## 0.6.4-own.14.1 — 2026-11-14
+
+Android build 85. Patch release for the fork.
+
+### English
+
+- Removed the voice input entry: recognition quality with the current speech model was not good enough, so the microphone button, recording bar and the microphone permission are gone. Host-side official speech support stays in place for a future revisit.
+- Everything else in 0.6.4-own.14 is unchanged.
+
+### 中文
+
+- 移除语音输入入口：当前语音模型识别质量不达预期，删除麦克风按钮、录音条与麦克风权限；Host 侧官方语音支持保留，后续再评估。
+- `0.6.4-own.14` 的其余内容不变。
+
 ## 0.6.4-own.14 — 2026-11-14
 
 Android build 84 (arm64 trial APK). Fork release built on upstream 0.6.3.

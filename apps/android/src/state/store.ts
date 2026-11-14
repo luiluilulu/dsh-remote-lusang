@@ -25,10 +25,6 @@ export const requireProxy = () => runtime.connection.requireProxy()
 export const requireSessionTools = (sessionId?: string) => runtime.connection.requireSessionTools(sessionId)
 export const requireBotClient = () => runtime.connection.requireBotClient()
 export const requireConnectionRpc = () => (method: string, params: unknown, signal?: AbortSignal) => runtime.connection.rpc(method, params, signal)
-/** Official experimental speech namespace availability of the connected Host. */
-export const supportsVoiceInput = () => runtime.connection.supportsVoiceInput()
-export const transcribeVoice = (audioBase64: string, language: string | undefined, signal?: AbortSignal) =>
-  runtime.connection.transcribeVoice(audioBase64, language, signal)
 /** Host-side Windows app APIs (TTS/OCR); the phone holds no cloud key. */
 export const supportsAppApis = () => runtime.connection.supportsAppApis()
 export const synthesizeSpeech = (text: string, options: { voice?: string; rate?: number } = {}, signal?: AbortSignal) =>

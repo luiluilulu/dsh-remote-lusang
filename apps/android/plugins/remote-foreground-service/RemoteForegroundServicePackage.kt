@@ -10,7 +10,6 @@ class RemoteForegroundServicePackage : ReactPackage {
     RemoteForegroundServiceModule(reactContext),
     RemoteDownloadsModule(reactContext),
     RemoteProcessTextModule(reactContext),
-    RemoteAudioRecorderModule(reactContext),
     RemoteAudioPlayerModule(reactContext),
   )
 

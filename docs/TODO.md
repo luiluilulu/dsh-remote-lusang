@@ -404,8 +404,9 @@ Implement Dart mobile proof vectors, scanner/credential integration and Android 
 设计文档：`docs/design/APP-API-INTEGRATION.md`。原则：能力全部在电脑端执行，API key 只存 Host 设置，
 手机不落地 key；端点走插件自建 RPC（固定 allowlist + Zod 校验），超 2 MiB 走既有 transfer。
 
-- [x] ASR 语音输入：Host allowlist 放行官方 speech Remote 命名空间 + `speech.remote.v1` 能力宣告；
-  Android 原生 16 kHz mono PCM16 WAV 录音、麦克风按钮与录音条、`speech/transcribe` 回填草稿（提交 `80ca1a8b`）。
+- [~] ASR 语音输入：官方 speech Remote allowlist / `speech.remote.v1` 与 Android 录音链路已实现
+  （提交 `80ca1a8b`），但识别体验不达标；`0.6.4-own.14.1` 已移除客户端入口（麦克风按钮、录音条、
+  RECORD_AUDIO 权限），Host 侧放行保留，待后续重做识别方案后再评估。
 - [x] MVP-1 Host 侧：`appApi.tts`（Windows SAPI，离线）、`appApi.ocr`（Windows.Media.Ocr，离线）、`appApi.voices`；
   `app-api.v1` 能力宣告；RPC 端点与 Zod 校验已接线，真实 Windows 端到端（合成 528ms / 识别 544ms）已验证。
 - [x] MVP-1 Android 朗读：原生 `RemoteAudioPlayerModule` + 助手消息「朗读/停止朗读」按钮（`app-api.v1` 能力门禁）。
