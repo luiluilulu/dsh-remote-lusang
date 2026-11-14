@@ -184,6 +184,13 @@ export const HARNESS_REMOTE_ALLOWLIST = [
   'settings/replace',
   'settings/update',
   'skills/list',
+  // Official experimental speech Remote namespace (`speechController`). Recording
+  // intake limits (WAV only, 4 MiB/120 s) are enforced by the Host service.
+  'speech/cancelPreparation',
+  'speech/catalog',
+  'speech/configure',
+  'speech/prepare',
+  'speech/transcribe',
   'subagents/interruptByParent',
   'subagents/list',
   'subagents/prompt',

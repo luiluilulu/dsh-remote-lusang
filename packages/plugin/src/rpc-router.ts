@@ -70,6 +70,7 @@ export const HOST_CAPABILITIES = [
   'codex.appserver.transfer.v1',
   'agent.acp.v1',
   'agent.acp.transfer.v1',
+  'speech.remote.v1',
 ] as const
 
 export class RpcRouter {

@@ -299,7 +299,7 @@ describe('HarnessRemoteBridge', () => {
     expect(dispatch).toHaveBeenCalledWith('permissionPresets/catalog', { args: {} }, expect.any(AbortSignal))
     await expect(bridge.call({ endpoint: 'permissionPresets/select', payload: { args: {} } })).rejects.toMatchObject({ code: 'METHOD_NOT_ALLOWED' })
     expect(dispatch).toHaveBeenCalledTimes(2)
-    for (const endpoint of ['session/projections', 'session/initializeDefaultModel', 'workspace/pinSession', 'workspace/unpinSession', 'userQuestions/answer', 'claudeCodeMods/pressBand', 'schedule/list', 'schedule/catalog']) {
+    for (const endpoint of ['session/projections', 'session/initializeDefaultModel', 'workspace/pinSession', 'workspace/unpinSession', 'userQuestions/answer', 'claudeCodeMods/pressBand', 'schedule/list', 'schedule/catalog', 'speech/catalog', 'speech/transcribe']) {
       const payload = { args: { request: { sessionId: 'session-1' } } }
       await expect(bridge.call({ endpoint, payload })).resolves.toMatchObject({ ok: true })
       expect(dispatch).toHaveBeenLastCalledWith(endpoint, payload, expect.any(AbortSignal))
@@ -308,7 +308,7 @@ describe('HarnessRemoteBridge', () => {
     // service owns it, and a Host without that service answers explicitly.
     await expect(bridge.call({ endpoint: 'schedule/create', payload: { args: { request: { sessionId: 'session-1' } } } }))
       .resolves.toMatchObject({ ok: false, error: { code: 'FEATURE_NOT_SUPPORTED' } })
-    for (const endpoint of ['schedule/arbitrary', 'schedule/updateAll']) {
+    for (const endpoint of ['schedule/arbitrary', 'schedule/updateAll', 'speech/follow', 'speech/internal']) {
       await expect(bridge.call({ endpoint, payload: { args: {} } })).rejects.toMatchObject({ code: 'METHOD_NOT_ALLOWED' })
     }
   })

@@ -270,6 +270,11 @@ async function activate(
   // FEATURE_NOT_SUPPORTED from the bridge, never a fabricated one.
   const schedule = (ctx.get('schedule', false)
     ?? (ctx.root === undefined ? undefined : ctx.root.get('schedule', false))) as ScheduleCreateService | undefined
+  // The official experimental speech Remote namespace is provided by a sibling
+  // bundle service. Resolve it from the root as well; a Host without it keeps the
+  // endpoint allowlist wired but does not advertise `speech.remote.v1`.
+  const speechAvailable = () => (ctx.get('speechController', false)
+    ?? (ctx.root === undefined ? undefined : ctx.root.get('speechController', false))) !== undefined
 
   const createRuntimes = (config: ResolvedConfig) => {
     const hostIdentities = new IdentityStore({
@@ -291,6 +296,7 @@ async function activate(
         peer,
       ),
       schedule,
+      speechAvailable,
     )
 
     let clientRuntime: ClientModeRuntime | undefined

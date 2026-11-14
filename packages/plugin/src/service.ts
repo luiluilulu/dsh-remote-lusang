@@ -95,6 +95,8 @@ export class HostPluginRuntime {
     private readonly pluginRoutes?: (peer?: unknown) => PluginRouteDispatcher | undefined,
     /** Host `schedule` service; absent on Hosts whose composition omits reminders. */
     private readonly schedule?: ScheduleCreateService,
+    /** Host `speechController` service; experimental speech Remote namespace. */
+    private readonly speechAvailable?: () => boolean,
   ) {
     this.terminalEnabled = config.terminal.enabled
     this.loopbackPorts = [...config.loopback.ports]
@@ -530,6 +532,9 @@ export class HostPluginRuntime {
     if (this.localGateway?.supportsCarrier && this.terminalEnabled) capabilities.push('harness.terminal.v1')
     if (this.fileViewerHost?.() !== undefined) capabilities.push('fileviewer.read.v1')
     if (this.pluginRoutes?.() !== undefined) capabilities.push('plugin.route.v1')
+    // Experimental official speech Remote namespace (`speechController`); the
+    // endpoint allowlist is always wired, but only advertise it when present.
+    if (this.speechAvailable?.() === true) capabilities.push('speech.remote.v1')
     if (this.codex.isAvailable()) capabilities.push('codex.appserver.v1', 'codex.appserver.transfer.v1')
     // Protocol support is stable during background warmup; workspaceTypes reports readiness.
     if (this.acp.enabledBackends().length > 0) {

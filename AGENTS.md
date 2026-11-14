@@ -1,5 +1,23 @@
 # Repository Guide for Agents
 
+## Official speech Remote groundwork (2026-11-14, B 线 MVP-0)
+
+DSH 自带官方实验性语音 Remote 命名空间（`@deepseek-ai/dsh-experimental-api-speech-to-text` 的
+`SpeechController`，`@Remote` 方法：`catalog` / `follow` / `configure` / `prepare` /
+`cancelPreparation` / `transcribe`；音频约定为 canonical base64 的 **WAV**，默认
+4 MiB / 120 s 上限，模型与识别器由 DSH 的 `speechToText` 服务提供，SenseVoice 模型已在
+`~/.dsh/speech-to-text/sensevoice/models`）。Host 插件不重建识别器，只把该命名空间加入
+`HARNESS_REMOTE_ALLOWLIST`（`speech/catalog|configure|prepare|cancelPreparation|transcribe`；
+流式 `speech/follow` 暂不放开），并在 Host 组合存在 `speechController` 服务时通过
+`hostCapabilities()` 宣告 `speech.remote.v1`（`index.ts` 从 ctx/root 探测服务，见
+`speechAvailable`；`HOST_CAPABILITIES` 常量同步包含该能力名）。
+
+后续 Android 侧仍需：录音依赖（Expo SDK 57 的 `expo-audio`）、`RECORD_AUDIO` 权限、
+录音转 16k mono PCM16 WAV（否则需 Host 侧 ffmpeg 转码，用户 PC 已装 ffmpeg）、把 base64
+经既有 `harness.remote.call` 发到 `speech/transcribe` 并回填草稿；朗读（TTS）官方暂无
+Remote 命名空间，需要自建 SAPI 桥或后续方案。本轮只做 Host 侧放行与能力探测，未改协议文档、
+未重建 Host bundle dist、未做 Android 端与真机验证。
+
 ## 版本号与发布节奏（2026-11-14 用户明确要求）
 
 **小修不单独发版。** 用户不接受「一个按钮/一个跳转的小修复就 bump 一个小版本号并发 Release」。
