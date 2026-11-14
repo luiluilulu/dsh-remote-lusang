@@ -596,6 +596,8 @@ const jaJP = {
     deleteTitle: (title: string) => `「${title}」を削除しますか?`, deleteBody: "これにより、ワークスペースとそのすべての会話がこのデバイスから削除されます。これを元に戻すことはできません。", delete: "ワークスペースの削除", rename: "名前の変更", moveUp: "上に移動", moveDown: "下に移動", expandWorkspace: (title: string) => `ワークスペース「${title}」を展開します`, collapseWorkspace: (title: string) => `ワークスペース「${title}」を折りたたむ`, newSessionIn: (title: string) => `「${title}」での新しい会話`, deviceDirectory: "コンピュータ上のプロジェクト ディレクトリ", browse: "ディレクトリを選択してください", directoryHint: "ここで作成された会話はこのディレクトリを使用します。", codexDirectoryHint: "選択したディレクトリがコンピューター上の Codex プロジェクト カタログに追加されます。", cursorDirectoryHint: "選択したディレクトリはCursor ACP セッション cwd になります（この電話接続専用に保持されます）。", piDirectoryHint: "選択したディレクトリは Pi ACP セッション cwd になります（この電話接続専用に保持されます）。", antigravityDirectoryHint: "このディレクトリは AGY の会話に使用します。既存の会話がコンピュータからロードされます。", opencodeDirectoryHint: "このディレクトリは OpenCode の会話に使用します。既存の会話がコンピュータからロードされます。", claudeDirectoryHint: "このディレクトリはClaudeとの会話に使用します。既存の会話がコンピュータからロードされます。", hermesDirectoryHint: "このディレクトリはHermesとの会話に使用します。既存の会話がコンピュータからロードされます。", renameTitle: "ワークスペースの名前を変更する", namePlaceholder: "ワークスペース名を入力してください", saveName: "保存", chooseFolder: "プロジェクトディレクトリを選択してください", loading: "読み込み中…", loadingDirectory: "ディレクトリを読み取り中…", noFolders: "ここには使用できるフォルダーがありません", showHidden: "隠しフォルダーを表示する", hideHidden: "隠しフォルダーを隠す", chooseThisFolder: "このディレクトリを使用します",
   },
   chat: {
+    webSearch: 'ウェブ検索',
+    searchEmpty: '結果が見つかりません',
     linkSummary: 'リンクを要約',
     ocrExtract: '文字を抽出',
     ocrEmpty: '文字が認識されませんでした',

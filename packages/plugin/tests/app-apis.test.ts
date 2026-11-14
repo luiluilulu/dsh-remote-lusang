@@ -55,3 +55,48 @@ describe('app api wire validation', () => {
     await expect(host.fetchLink({ url: `https://example.com/${'a'.repeat(2_100)}` })).rejects.toMatchObject({ name: 'ZodError' })
   })
 })
+
+describe('web search', () => {
+  const fakeFetch = (handler: (input: unknown) => Response) => {
+    const calls: string[] = []
+    const impl = (async (input: unknown) => {
+      calls.push(String(input))
+      return handler(input)
+    }) as unknown as typeof fetch
+    return { impl, calls }
+  }
+
+  it('requires a Host-side key and never leaks it into errors', async () => {
+    const unconfigured = new AppApiHost()
+    expect(unconfigured.searchAvailable()).toBe(false)
+    await expect(unconfigured.search({ query: 'hello' })).rejects.toMatchObject({ code: 'APP_API_UNAVAILABLE' })
+
+    const failing = fakeFetch(() => new Response('denied', { status: 401 }))
+    const host = new AppApiHost(undefined, { search: { provider: 'brave', apiKey: 'secret-key' } }, failing.impl)
+    expect(host.searchAvailable()).toBe(true)
+    await expect(host.search({ query: 'hello' })).rejects.toMatchObject({ code: 'APP_API_FAILED' })
+    await expect(host.search({ query: 'hello' })).rejects.not.toThrow(/secret-key/)
+    expect(failing.calls[0]).toContain('api.search.brave.com')
+  })
+
+  it('maps provider rows, drops non-http results and strips markup', async () => {
+    const { impl, calls } = fakeFetch(() => new Response(JSON.stringify({
+      web: {
+        results: [
+          { title: 'Docs', url: 'https://example.com/docs', description: '<b>Hello</b> &amp; world' },
+          { title: 'Bad', url: 'javascript:alert(1)', description: 'drop me' },
+          { title: 'Next', url: 'https://example.com/next', description: 'plain' },
+        ],
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const host = new AppApiHost(undefined, { search: { provider: 'brave', apiKey: 'k' } }, impl)
+    const result = await host.search({ query: 'hello world', limit: 3 })
+    expect(result.results).toEqual([
+      { title: 'Docs', url: 'https://example.com/docs', snippet: 'Hello & world' },
+      { title: 'Next', url: 'https://example.com/next', snippet: 'plain' },
+    ])
+    expect(calls[0]).toContain('q=hello+world')
+    expect(calls[0]).toContain('count=3')
+    await expect(host.search({ query: 'hello', limit: 99 })).rejects.toMatchObject({ name: 'ZodError' })
+  })
+})

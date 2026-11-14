@@ -32,6 +32,13 @@ const fetchParamsSchema = z.object({
   url: z.string().min(1).max(2_048),
 }).strict()
 
+const searchParamsSchema = z.object({
+  query: z.string().min(1).max(200),
+  limit: z.number().int().min(1).max(10).optional(),
+}).strict()
+
+type SearchProvider = 'brave' | 'tavily'
+
 const MAX_TTS_BYTES = 4 * 1024 * 1024
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_BASE64_BYTES = Math.ceil(MAX_IMAGE_BYTES * 4 / 3) + 4
@@ -92,6 +99,30 @@ const OCR_SCRIPT = [
   '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
   'ConvertTo-Json -Compress -InputObject @{ text = $result.Text; lines = $lines }',
 ].join('\n')
+
+function searchSnippet(value: unknown): string {
+  return typeof value === 'string'
+    ? decodeEntities(value.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 300)
+    : ''
+}
+
+function mapSearchResults(rows: unknown): Array<{ title: string; url: string; snippet: string }> {
+  if (!Array.isArray(rows)) return []
+  const results: Array<{ title: string; url: string; snippet: string }> = []
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null) continue
+    const record = row as Record<string, unknown>
+    const url = typeof record.url === 'string' ? record.url : ''
+    if (!/^https?:\/\//i.test(url)) continue
+    results.push({
+      title: searchSnippet(record.title) || url,
+      url,
+      snippet: searchSnippet(record.description ?? record.content),
+    })
+    if (results.length >= 10) break
+  }
+  return results
+}
 
 function powerShellPath(): string {
   return join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
@@ -199,7 +230,23 @@ function wavDurationMs(bytes: Buffer): number {
 }
 
 export class AppApiHost {
-  constructor(private readonly logger?: SafeLogger) {}
+  private readonly searchProvider: SearchProvider
+  private readonly searchKey: string
+
+  constructor(
+    private readonly logger?: SafeLogger,
+    options: { search?: { provider?: string; apiKey?: string } } = {},
+    /** Injectable for contract tests; production uses the global fetch. */
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {
+    this.searchProvider = options.search?.provider === 'tavily' ? 'tavily' : 'brave'
+    this.searchKey = options.search?.apiKey?.trim() ?? ''
+  }
+
+  /** Web search needs a user-supplied key that only lives on this computer. */
+  searchAvailable(): boolean {
+    return this.searchKey !== ''
+  }
 
   /** Both capabilities depend on Windows PowerShell; other Hosts report unavailable. */
   available(): boolean {
@@ -281,6 +328,46 @@ export class AppApiHost {
       throw new RpcError('APP_API_FAILED', 'Text recognition failed on this computer.')
     } finally {
       await rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  /**
+   * Web search through a user-supplied provider key. The key is only read from
+   * this Host's configuration, never echoed in results, errors or logs.
+   */
+  async search(params: unknown): Promise<{ results: Array<{ title: string; url: string; snippet: string }> }> {
+    const { query, limit } = searchParamsSchema.parse(params)
+    if (!this.searchAvailable()) {
+      throw new RpcError('APP_API_UNAVAILABLE', 'Web search needs an API key on this computer.')
+    }
+    const count = limit ?? 5
+    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    try {
+      if (this.searchProvider === 'tavily') {
+        const response = await this.fetchImpl('https://api.tavily.com/search', {
+          method: 'POST',
+          signal,
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ api_key: this.searchKey, query, max_results: count, search_depth: 'basic' }),
+        })
+        if (!response.ok) throw new RpcError('APP_API_FAILED', `The search provider returned HTTP ${response.status}.`)
+        const payload = await response.json() as { results?: unknown }
+        return { results: mapSearchResults(payload.results) }
+      }
+      const target = new URL('https://api.search.brave.com/res/v1/web/search')
+      target.searchParams.set('q', query)
+      target.searchParams.set('count', String(count))
+      const response = await this.fetchImpl(target, {
+        signal,
+        headers: { accept: 'application/json', 'x-subscription-token': this.searchKey },
+      })
+      if (!response.ok) throw new RpcError('APP_API_FAILED', `The search provider returned HTTP ${response.status}.`)
+      const payload = await response.json() as { web?: { results?: unknown } }
+      return { results: mapSearchResults(payload.web?.results) }
+    } catch (error) {
+      if (error instanceof RpcError) throw error
+      this.logger?.warn('app api search failed', { reason: error instanceof Error ? error.name : 'unknown' })
+      throw new RpcError('APP_API_FAILED', 'Web search failed on this computer.')
     }
   }
 

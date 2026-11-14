@@ -28,7 +28,7 @@ import type { CustomPrompt } from '../services/storage'
 import { BUILT_IN_PROMPTS } from '../services/storage'
 import type { ChatSection } from '../state/message-helpers'
 import { isKnownBotSessionId, useBotTeamStore } from '../state/bot-store'
-import { chatImageConnectionGeneration, fetchLink, requireConnectionRpc, requireSessionTools, sessionChatImageLoader, supportsAppApis, useAppStore } from '../state/store'
+import { chatImageConnectionGeneration, fetchLink, requireConnectionRpc, requireSessionTools, searchWeb, sessionChatImageLoader, supportsAppApis, supportsWebSearch, useAppStore } from '../state/store'
 import { type UiArtifact } from '../state/ui-artifacts'
 import type {
   ChatItem,
@@ -275,6 +275,28 @@ export function ChatScreen({
       .catch(error => {
         Alert.alert(
           strings.chat.linkSummary,
+          error instanceof Error && error.message !== '' ? error.message : strings.messageActions.unavailable,
+        )
+      })
+  }
+
+  // Web search: the Host queries the provider with its own key; the phone only
+  // receives titles, links and snippets, which become a quote for the model.
+  const runWebSearch = (query: string) => {
+    void searchWeb(query, 5)
+      .then(results => {
+        if (results.length === 0) {
+          Alert.alert(strings.chat.webSearch, strings.chat.searchEmpty)
+          return
+        }
+        const text = results
+          .map((row, index) => `${index + 1}. ${row.title}\n${row.url}\n${row.snippet}`.trim())
+          .join('\n\n')
+        setQuotes(current => [...current, `搜索：${query}\n\n${text}`])
+      })
+      .catch(error => {
+        Alert.alert(
+          strings.chat.webSearch,
           error instanceof Error && error.message !== '' ? error.message : strings.messageActions.unavailable,
         )
       })
@@ -1440,6 +1462,7 @@ export function ChatScreen({
           onOpenExpand={() => setComposerExpanded(true)}
           onOpenActions={openPlusMenu} onOpenPrompts={openPromptsPicker}
           onSummarizeLink={supportsAppApis() ? summarizeLink : undefined}
+          onSearchWeb={supportsWebSearch() ? runWebSearch : undefined}
           onSubmit={() => void submit()} onStop={() => void stopSession()}
         />
         </View>

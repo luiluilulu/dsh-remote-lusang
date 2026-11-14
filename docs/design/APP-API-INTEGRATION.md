@@ -70,12 +70,14 @@
   作为草稿内容，由用户确认发送。
 - 边界：不做 JS 渲染（SPA 需后续方案）；不做通用代理。
 
-### Search（MVP-3）
+### Search（MVP-3，已实现）
 
 - Host：按 Host 设置中的供应商与 key 调搜索 API（默认支持 Brave Search，可扩展 Tavily/Bing），
   返回 `title/url/snippet`；key 只读自 Host 设置，未配置返回不可用。
 - Android：输入框「搜索」入口，选中结果后把链接插入草稿并触发 Fetch 总结。
 - 边界：需要用户自备 key；供应商条款与配额由用户负责；key 永不进日志/手机。
+
+配置：Host 进程环境变量 `DSH_REMOTE_SEARCH_KEY`（必填）与 `DSH_REMOTE_SEARCH_PROVIDER`（`brave` 默认 / `tavily`）；未配置时不宣告 `app-api.search.v1`，手机端隐藏入口。key 只用于发往供应商的请求头/请求体，不写日志、不回传、不入仓库。
 
 ## 5. 里程碑与验证
 

@@ -104,7 +104,13 @@ export class HostPluginRuntime {
     this.terminalEnabled = config.terminal.enabled
     this.loopbackPorts = [...config.loopback.ports]
     this.codex = new CodexRemoteDomain(config.codex, logger)
-    this.appApis = new AppApiHost(logger)
+    this.appApis = new AppApiHost(logger, {
+      // Search needs a user-owned provider key; it only ever lives on this PC.
+      search: {
+        provider: process.env.DSH_REMOTE_SEARCH_PROVIDER,
+        apiKey: process.env.DSH_REMOTE_SEARCH_KEY,
+      },
+    })
     this.acp = new AcpRemoteGateway(config.acp ?? { enabled: false, backends: [] }, logger, undefined, undefined, () => this.terminalEnabled, this.terminalSpawner)
     this.connections = new ConnectionController(this.identities, (context, send) => {
       const peerGateway = this.localGateway?.createPeer?.() ?? this.localGateway
@@ -542,6 +548,7 @@ export class HostPluginRuntime {
     if (this.speechAvailable?.() === true) capabilities.push('speech.remote.v1')
     // Windows-local TTS/OCR endpoints; the phone reaches them through this Host only.
     if (this.appApis.available()) capabilities.push('app-api.v1')
+    if (this.appApis.searchAvailable()) capabilities.push('app-api.search.v1')
     if (this.codex.isAvailable()) capabilities.push('codex.appserver.v1', 'codex.appserver.transfer.v1')
     // Protocol support is stable during background warmup; workspaceTypes reports readiness.
     if (this.acp.enabledBackends().length > 0) {

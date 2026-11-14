@@ -30,6 +30,8 @@ export class AndroidRemoteConnection {
   private speechSupported = false
   /** Host-side Windows app APIs (TTS/OCR) announced as `app-api.v1`. */
   private appApiSupported = false
+  /** Host-side web search announced as `app-api.search.v1` (needs a PC key). */
+  private appApiSearchSupported = false
   private core?: RemoteClientCore
   private proxy?: RemoteHarnessClient
   private codex?: CodexRemoteClient
@@ -150,6 +152,7 @@ export class AndroidRemoteConnection {
         this.sessionTools = undefined
         this.speechSupported = false
         this.appApiSupported = false
+        this.appApiSearchSupported = false
         options.onClose?.({ retryable: retryableClose, ...(lastTransport !== undefined ? { lastTransport } : {}) })
       })
       await core.connect()
@@ -222,6 +225,7 @@ export class AndroidRemoteConnection {
     // when its composition provides the speechController service.
     this.speechSupported = features.capabilities.includes('speech.remote.v1')
     this.appApiSupported = features.capabilities.includes('app-api.v1')
+    this.appApiSearchSupported = features.capabilities.includes('app-api.search.v1')
     this.codexAvailable = features.capabilities.includes('codex.appserver.transfer.v1')
       && remoteWorkspaceTypeAvailable(features.capabilities, features.workspaceTypes, 'codex', 'codex.appserver.v1')
     if (this.codexAvailable) this.codex ??= new CodexRemoteClient(core, true)
@@ -389,6 +393,33 @@ export class AndroidRemoteConnection {
       text,
       bytes: typeof record.bytes === 'number' ? record.bytes : 0,
     }
+  }
+
+  /** Host-side web search; the provider key never leaves the computer. */
+  supportsWebSearch(): boolean {
+    return this.core !== undefined && this.appApiSearchSupported
+  }
+
+  async searchWeb(
+    query: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
+    if (!this.appApiSearchSupported) throw new Error(strings.messageActions.unavailable)
+    const params: Record<string, unknown> = { query }
+    if (limit !== undefined) params.limit = limit
+    const value = await this.core.rpc<unknown>('appApi.search', params, signal)
+    const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+    const rows = Array.isArray(record.results) ? record.results : []
+    return rows
+      .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+      .map(row => ({
+        title: typeof row.title === 'string' ? row.title : '',
+        url: typeof row.url === 'string' ? row.url : '',
+        snippet: typeof row.snippet === 'string' ? row.snippet : '',
+      }))
+      .filter(row => row.url !== '')
   }
 
   /** Optional CodeX business client; available only when the Host advertises both domain capabilities. */

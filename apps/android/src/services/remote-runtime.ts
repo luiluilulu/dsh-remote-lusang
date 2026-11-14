@@ -82,6 +82,10 @@ export class AndroidRemoteRuntime {
   fetchLink(url: string, signal?: AbortSignal) {
     return this.client.fetchLink(url, signal)
   }
+  supportsWebSearch() { return this.client.supportsWebSearch() }
+  searchWeb(query: string, limit?: number, signal?: AbortSignal) {
+    return this.client.searchWeb(query, limit, signal)
+  }
   hasCodex() { return this.client.hasCodex() }
   requireCursor() { return this.client.requireCursor() }
   hasCursor() { return this.client.hasCursor() }

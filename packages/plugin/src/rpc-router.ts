@@ -60,6 +60,7 @@ const apiMethods = new Set([
   'appApi.tts',
   'appApi.ocr',
   'appApi.fetch',
+  'appApi.search',
   'workspace.upload.open',
   'workspace.upload.chunk',
   'workspace.upload.commit',
@@ -229,12 +230,14 @@ export class RpcRouter {
       case 'appApi.voices':
       case 'appApi.tts':
       case 'appApi.ocr':
-      case 'appApi.fetch': {
+      case 'appApi.fetch':
+      case 'appApi.search': {
         const appApis = this.requireAppApis()
         if (method === 'appApi.voices') return appApis.voices()
         if (method === 'appApi.tts') return appApis.tts(params)
         if (method === 'appApi.ocr') return appApis.ocr(params)
-        return appApis.fetchLink(params)
+        if (method === 'appApi.fetch') return appApis.fetchLink(params)
+        return appApis.search(params)
       }
       default: throw new RpcError('METHOD_NOT_FOUND', 'The requested method does not exist.')
     }

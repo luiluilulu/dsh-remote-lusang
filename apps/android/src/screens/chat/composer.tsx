@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleStop, Link2, Mic, Plus, X, Zap } from 'lucide-react-native'
+import { ArrowUp, Check, ChevronDown, CircleStop, Link2, Mic, Plus, Search, X, Zap } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
@@ -80,18 +80,26 @@ type Props = {
   onOpenPrompts: () => void
   /** When the draft is one link, fetch it on the Host and quote the page text. */
   onSummarizeLink?: (url: string) => void
+  /** Search the web through the Host and quote the result list. */
+  onSearchWeb?: (query: string) => void
   onSubmit: () => void
   onStop: () => void
 }
 
 export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, replyActive, stopping, compactRunning,
   hasComposerContent, connected, editable, composerDisabled, sendDisabled, compactComposer,
-  composerInputMaxHeight, model, voice, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSummarizeLink, onSubmit, onStop }: Props) {
+  composerInputMaxHeight, model, voice, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSummarizeLink, onSearchWeb, onSubmit, onStop }: Props) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
   const { composerInputRef, mentionType, mentionGroups, selection, closeMention, onChangeText, onSelectionChange } = input
   const draftSegments = useMemo(() => splitDraftSegments(draft), [draft])
   const linkUrl = useMemo(() => singleLink(draft), [draft])
+  const webQuery = useMemo(() => {
+    if (onSearchWeb === undefined) return undefined
+    const trimmed = draft.trim()
+    if (trimmed === '' || trimmed.length > 200 || trimmed.includes('\n') || singleLink(trimmed) !== undefined) return undefined
+    return trimmed
+  }, [draft, onSearchWeb])
   const backendTextKeys = BACKEND_CHAT_TEXT_KEYS[backend ?? 'harness'] ?? BACKEND_CHAT_TEXT_KEYS.harness
   const replyStatusLabel = stopping ? strings.chat.stopping : strings.chat[backendTextKeys.generating]
   return <>
@@ -181,6 +189,20 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
             <Link2 size={14} color={colors.linkText} />
             <Text numberOfLines={1} style={[styles.linkSummaryText, { color: colors.linkText }]}>
               {strings.chat.linkSummary}
+            </Text>
+          </Pressable>
+        )}
+        {onSearchWeb !== undefined && webQuery !== undefined && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.chat.webSearch}
+            onPress={() => onSearchWeb(webQuery)}
+            hitSlop={6}
+            style={({ pressed }) => [styles.linkSummaryRow, pressed && styles.plusPressed]}
+          >
+            <Search size={14} color={colors.linkText} />
+            <Text numberOfLines={1} style={[styles.linkSummaryText, { color: colors.linkText }]}>
+              {strings.chat.webSearch}
             </Text>
           </Pressable>
         )}
