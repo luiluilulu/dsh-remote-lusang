@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics'
-import { ArrowLeft, FileText, ListTree, Menu, MessageSquare, Pencil, RefreshCw, X } from 'lucide-react-native'
+import { ArrowLeft, FileText, ListTree, Menu, MessageSquare, Pencil, RefreshCw, ScanText, X } from 'lucide-react-native'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
@@ -23,6 +23,7 @@ import { isSubagentSession } from '../lib/session-kind'
 import { workspaceStableKey } from '../lib/workspace-key'
 import { strings } from '../locales/i18n'
 import { sessionPermissions } from '../services/session-permissions'
+import { extractTextFromImage, imageOcrAvailable } from '../services/ocr'
 import type { CustomPrompt } from '../services/storage'
 import { BUILT_IN_PROMPTS } from '../services/storage'
 import type { ChatSection } from '../state/message-helpers'
@@ -186,6 +187,7 @@ export function ChatScreen({
   const setDraft = (value: string) => updateBrowseEntry(memoryScope, session?.sessionId ?? '', {draft: value})
   const [trajectory, setTrajectory] = useState(false)
   const [composingDuringRun, setComposingDuringRun] = useState(false)
+  const [ocrBusy, setOcrBusy] = useState(false)
 
   const [sessionsOpen, setSessionsOpen] = useState(true)
   // Cold start parks the sidebar full-screen before any page is chosen; swiping
@@ -236,6 +238,30 @@ export function ChatScreen({
   useEffect(() => {
     void voice.cancel()
   }, [session?.sessionId, voice.cancel])
+
+  // "取字": the computer runs Windows OCR; the recognized text lands in the
+  // composer draft, never sent automatically.
+  const runImageOcr = () => {
+    if (previewImageUri === undefined || ocrBusy) return
+    setOcrBusy(true)
+    void extractTextFromImage(previewImageUri)
+      .then(text => {
+        if (text === '') {
+          Alert.alert(strings.chat.ocrExtract, strings.chat.ocrEmpty)
+          return
+        }
+        setPreviewImageUri(undefined)
+        const current = draftRef.current
+        applyDraft(current === '' ? text : `${current} ${text}`)
+      })
+      .catch(error => {
+        Alert.alert(
+          strings.chat.ocrExtract,
+          error instanceof Error && error.message !== '' ? error.message : strings.chat.ocrUnavailable,
+        )
+      })
+      .finally(() => setOcrBusy(false))
+  }
   const lastQuoteCountRef = useRef(quotes.length)
   useEffect(() => {
     if (quotes.length > lastQuoteCountRef.current) {
@@ -1528,6 +1554,21 @@ export function ChatScreen({
               style={styles.lightboxImage}
               resizeMode="contain"
             />
+          )}
+          {imageOcrAvailable() && (
+            <Pressable
+              style={[styles.lightboxClose, { right: 72 }]}
+              onPress={runImageOcr}
+              accessibilityRole="button"
+              accessibilityLabel={strings.chat.ocrExtract}
+              accessibilityState={{ busy: ocrBusy, disabled: ocrBusy }}
+              disabled={ocrBusy}
+              hitSlop={12}
+            >
+              {ocrBusy
+                ? <ActivityIndicator size="small" color="#ffffff" />
+                : <ScanText size={22} color="#ffffff" />}
+            </Pressable>
           )}
           <Pressable
             style={styles.lightboxClose}
