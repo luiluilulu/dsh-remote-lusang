@@ -2010,13 +2010,13 @@ const createStyles = (colors: ThemeColors) =>
     navItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 14,
-      paddingHorizontal: spacing.sm,
-      height: 50,
-      marginHorizontal: spacing.xs,
-      borderRadius: radius.lg,
+      gap: 10,
+      paddingHorizontal: 10,
+      height: 36,
+      marginHorizontal: 0,
+      borderRadius: 8,
     },
-    navItemText: { ...type.body, fontSize: 17, color: colors.ink },
+    navItemText: { fontSize: 14, lineHeight: 20, color: colors.ink, includeFontPadding: false },
     modeSwitcherWrap: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -2050,7 +2050,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: '700',
     },
     navGroupWrap: {
-      paddingHorizontal: spacing.md,
+      paddingHorizontal: 8,
       marginBottom: spacing.xs,
     },
     favoritesWrap: {
