@@ -14,6 +14,7 @@ import {
 } from './harness-version.js'
 import type { SafeLogger } from './logging.js'
 import { RpcRouter } from './rpc-router.js'
+import { AppApiHost } from './app-apis/index.js'
 import { RemoteFileViewerBridge, type FileViewerHostServiceLike } from './file-viewer-bridge.js'
 import {
   HostServerApi,
@@ -78,6 +79,8 @@ export class HostPluginRuntime {
   private closed = false
   private readonly codex: CodexRemoteDomain
   private readonly acp: AcpRemoteGateway
+  /** Windows-local speech synthesis and OCR for the mobile client. */
+  private readonly appApis: AppApiHost
   private readonly codexWorkspaceState = new CodexWorkspaceState(key => TerminalPolicy.releaseOwner(this.terminalOwners, key))
   private localCodexPeer?: CodexPeerBridge
   private localCodexPublish: PublishCodexFrame = async () => undefined
@@ -101,6 +104,7 @@ export class HostPluginRuntime {
     this.terminalEnabled = config.terminal.enabled
     this.loopbackPorts = [...config.loopback.ports]
     this.codex = new CodexRemoteDomain(config.codex, logger)
+    this.appApis = new AppApiHost(logger)
     this.acp = new AcpRemoteGateway(config.acp ?? { enabled: false, backends: [] }, logger, undefined, undefined, () => this.terminalEnabled, this.terminalSpawner)
     this.connections = new ConnectionController(this.identities, (context, send) => {
       const peerGateway = this.localGateway?.createPeer?.() ?? this.localGateway
@@ -161,6 +165,7 @@ export class HostPluginRuntime {
           threadId => this.codex.resolveThreadWorkspace(context.connectionId, threadId),
           sessionId => this.acp.resolveUploadWorkspace(context.connectionId, sessionId),
         ), undefined, context.transportMode),
+        this.appApis,
       )
     }, this.logger)
     if (config.serverUrl !== undefined) {
@@ -535,6 +540,8 @@ export class HostPluginRuntime {
     // Experimental official speech Remote namespace (`speechController`); the
     // endpoint allowlist is always wired, but only advertise it when present.
     if (this.speechAvailable?.() === true) capabilities.push('speech.remote.v1')
+    // Windows-local TTS/OCR endpoints; the phone reaches them through this Host only.
+    if (this.appApis.available()) capabilities.push('app-api.v1')
     if (this.codex.isAvailable()) capabilities.push('codex.appserver.v1', 'codex.appserver.transfer.v1')
     // Protocol support is stable during background warmup; workspaceTypes reports readiness.
     if (this.acp.enabledBackends().length > 0) {

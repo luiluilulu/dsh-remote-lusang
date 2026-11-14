@@ -9,6 +9,7 @@ import {
 } from '@dsh-remote/protocol'
 import { z } from 'zod'
 import type { LoopbackHost } from './loopback-host.js'
+import type { AppApiHost } from './app-apis/index.js'
 import type { RemoteFileViewerBridge } from './file-viewer-bridge.js'
 import type { HarnessRemoteBridge } from './harness-remote-bridge.js'
 import type { SafeLogger } from './logging.js'
@@ -55,6 +56,9 @@ const apiMethods = new Set([
   'agent.acp.transfer.read',
   'agent.acp.transfer.close',
   'plugin.route.call',
+  'appApi.voices',
+  'appApi.tts',
+  'appApi.ocr',
   'workspace.upload.open',
   'workspace.upload.chunk',
   'workspace.upload.commit',
@@ -71,6 +75,7 @@ export const HOST_CAPABILITIES = [
   'agent.acp.v1',
   'agent.acp.transfer.v1',
   'speech.remote.v1',
+  'app-api.v1',
 ] as const
 
 export class RpcRouter {
@@ -88,6 +93,8 @@ export class RpcRouter {
     private readonly workspaceTypes?: () => readonly RemoteWorkspaceTypeDescription[],
     private readonly pluginRoute?: PluginRouteBridge,
     private readonly workspaceUpload?: WorkspaceUploadHost,
+    /** Windows-local speech/OCR capabilities; the phone never holds a key. */
+    private readonly appApis?: AppApiHost,
   ) {}
 
   async closePeerStreams(): Promise<void> {
@@ -218,6 +225,14 @@ export class RpcRouter {
         return this.workspaceUpload.call(method, params)
       }
       case 'plugin.route.call': return this.requirePluginRoute().call(params)
+      case 'appApi.voices':
+      case 'appApi.tts':
+      case 'appApi.ocr': {
+        const appApis = this.requireAppApis()
+        if (method === 'appApi.voices') return appApis.voices()
+        if (method === 'appApi.tts') return appApis.tts(params)
+        return appApis.ocr(params)
+      }
       default: throw new RpcError('METHOD_NOT_FOUND', 'The requested method does not exist.')
     }
   }
@@ -248,6 +263,13 @@ export class RpcRouter {
       throw new RpcError('FEATURE_NOT_SUPPORTED', 'This Host cannot forward local plugin routes.')
     }
     return this.pluginRoute
+  }
+
+  private requireAppApis(): AppApiHost {
+    if (this.appApis === undefined || !this.appApis.available()) {
+      throw new RpcError('APP_API_UNAVAILABLE', 'This Host does not provide the Windows app APIs.')
+    }
+    return this.appApis
   }
 }
 

@@ -34,10 +34,10 @@
 
 | 端点 | 入参 | 出参 | 上限 |
 | --- | --- | --- | --- |
-| `appApi/tts` | `{ text, voice?, rate? }` | `{ audioBase64, format: 'wav', durationMs }` | 文本 ≤ 2 000 字，WAV ≤ 4 MiB |
-| `appApi/ocr` | `{ imageBase64, language? }` | `{ text, lines: string[] }` | 图片 ≤ 8 MiB |
-| `appApi/fetch` | `{ url }` | `{ url, title, text }` | 响应 ≤ 1 MiB，正文 ≤ 20 000 字 |
-| `appApi/search` | `{ query, limit? }` | `{ results: [{ title, url, snippet }] }` | 结果 ≤ 10 条 |
+| `appApi.tts` | `{ text, voice?, rate? }` | `{ audioBase64, format: 'wav', durationMs }` | 文本 ≤ 2 000 字，WAV ≤ 4 MiB |
+| `appApi.ocr` | `{ imageBase64, language? }` | `{ text, lines: string[] }` | 图片 ≤ 8 MiB |
+| `appApi.fetch` | `{ url }` | `{ url, title, text }` | 响应 ≤ 1 MiB，正文 ≤ 20 000 字 |
+| `appApi.search` | `{ query, limit? }` | `{ results: [{ title, url, snippet }] }` | 结果 ≤ 10 条 |
 
 - 密钥与配置：只存 Host 插件设置（`search.apiKey` 等）；设置项只在本机可读写；任何错误信息不得包含 key；
   未配置时端点返回 `APP_API_UNAVAILABLE`，手机隐藏入口而不是报错。
@@ -52,7 +52,7 @@
   同文本+voice+rate 做内存 LRU（48 条）避免重复合成。
 - Android：新增原生 `RemoteAudioPlayerModule.kt`（`MediaPlayer`，播放 base64 WAV，start/stop/释放）；
   助手消息操作行增加「朗读」按钮，再点停止；不落盘（缓存到 `cacheDir` 且退出清理）。
-- 边界：仅 Windows Host 可用；语音列表由 Host 提供（`appApi/voices` 可选，MVP 用默认）。
+- 边界：仅 Windows Host 可用；语音列表由 Host 提供（`appApi.voices` 可选，MVP 用默认）。
 
 ### OCR 取字（MVP-1）
 
