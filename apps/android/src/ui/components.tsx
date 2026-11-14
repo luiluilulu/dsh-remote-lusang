@@ -469,8 +469,10 @@ export function SuccessNotice({ children }: { children: ReactNode }) {
 }
 
 /** Rounded inset section, the settings-style container used across screens. */
-export function GroupCard({ children, style, raised = false }: { children: ReactNode; style?: StyleProp<ViewStyle>; raised?: boolean }) {
+export function GroupCard({ children, style, raised = false, flat = false }: { children: ReactNode; style?: StyleProp<ViewStyle>; raised?: boolean; flat?: boolean }) {
   const styles = useThemedStyles(createStyles)
+  // Official settings lists are flat: no card fill, just a hairline section frame.
+  if (flat) return <View style={[styles.groupFlat, style]}>{children}</View>
   // A raised card casts its shadow from an unclipped shell and clips rows in an inner layer.
   if (raised) return <View style={[styles.groupCardRaised, style]}><View style={styles.groupCardClip}>{children}</View></View>
   return <View style={[styles.groupCard, style]}>{children}</View>
@@ -655,8 +657,8 @@ function createStyles(colors: ThemeColors) {
     rowSubtitle: { ...type.small, color: colors.muted },
     rowInlineSubtitle: { flex: 1 },
     rowMeta: { ...type.caption, color: colors.muted },
-    sectionTitleRow: { minHeight: 36, marginTop: spacing.xl, marginBottom: spacing.xs, paddingLeft: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    sectionTitle: { ...type.small, fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.muted },
+    sectionTitleRow: { minHeight: 28, marginTop: spacing.xl, marginBottom: spacing.xs, paddingLeft: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    sectionTitle: { fontSize: 12, lineHeight: 18, fontWeight: '500', color: colors.subtle, includeFontPadding: false },
     keyValue: { paddingVertical: spacing.sm, flexDirection: 'row', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
     keyLabel: { ...type.small, color: colors.muted, maxWidth: '40%' },
     keyValueText: { ...type.smallStrong, color: colors.ink, flex: 1, textAlign: 'right' },
@@ -672,17 +674,19 @@ function createStyles(colors: ThemeColors) {
     successNotice: { padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.successSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     successNoticeText: { ...type.small, color: colors.ink, flex: 1 },
     groupCard: { borderRadius: radius.xl, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, overflow: 'hidden' },
+    // Official flat section: full-bleed rows framed by hairlines instead of a rounded card.
+    groupFlat: { backgroundColor: 'transparent', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.separator },
     groupCardRaised: { borderRadius: radius.xl, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, ...floatingShadow(colors) },
     groupCardClip: { borderRadius: radius.xl, overflow: 'hidden' },
-    groupRow: { minHeight: 58, paddingLeft: spacing.md, flexDirection: 'row', alignItems: 'center' },
+    groupRow: { minHeight: 52, paddingLeft: spacing.md, flexDirection: 'row', alignItems: 'center' },
     groupRowPressed: { backgroundColor: colors.surfaceStrong },
-    groupRowIcon: { width: 28, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-    groupRowBody: { flex: 1, minWidth: 0, minHeight: 58, paddingRight: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    groupRowIcon: { width: 26, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+    groupRowBody: { flex: 1, minWidth: 0, minHeight: 52, paddingRight: spacing.md, paddingVertical: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     groupRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
     groupRowCopy: { flex: 1, minWidth: 0, gap: 2 },
-    groupRowLabel: { ...type.body, fontSize: 16, color: colors.ink },
+    groupRowLabel: { fontSize: 14, lineHeight: 20, color: colors.ink, includeFontPadding: false },
     groupRowDetail: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.muted },
-    groupRowValue: { ...type.small, fontSize: 15, color: colors.muted, maxWidth: '45%' },
+    groupRowValue: { fontSize: 14, lineHeight: 20, color: colors.muted, maxWidth: '45%', includeFontPadding: false },
     filterChip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'transparent' },
     filterChipSelected: { backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, ...floatingShadow(colors) },
     filterChipText: { ...type.small, fontSize: 15, color: colors.muted },

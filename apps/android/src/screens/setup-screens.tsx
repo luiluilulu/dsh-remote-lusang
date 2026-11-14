@@ -10,7 +10,7 @@ import { getContentUriAsync } from 'expo-file-system/legacy'
 import * as IntentLauncher from 'expo-intent-launcher'
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Toggle } from '../ui/toggle'
-import { AlertTriangle, BatteryCharging, Bell, BellRing, Bot, Cable, Check, ChevronRight, Copy, Download, ExternalLink, Fingerprint, FolderPen, Globe, Hash, History, Info, KeyRound, Languages, Laptop, ListCollapse, LockKeyhole, LogOut, Mail, MoreVertical, Network, PanelTop, QrCode as QrCodeIcon, RotateCcw, Route, Server, Settings, ShieldAlert, ShieldCheck, SlidersHorizontal, Smartphone, Terminal, Type, UserRound, X, type LucideIcon } from 'lucide-react-native'
+import { AlertTriangle, BatteryCharging, Bell, BellRing, Bot, Cable, Check, ChevronRight, Copy, Download, ExternalLink, Fingerprint, FolderPen, Globe, Hash, History, Info, KeyRound, Languages, Laptop, ListCollapse, LockKeyhole, LogOut, Mail, Moon, MoreVertical, Network, PanelTop, QrCode as QrCodeIcon, RotateCcw, Route, Server, Settings, ShieldAlert, ShieldCheck, SlidersHorizontal, Smartphone, Sun, Terminal, Type, UserRound, X, type LucideIcon } from 'lucide-react-native'
 import { useAppStore } from '../state/store'
 import { useBotTeamStore } from '../state/bot-store'
 import { DsBotSettingsModal } from './bot/ds-bot-settings-screen'
@@ -23,10 +23,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { transportPreferenceOptions } from '../types'
 import type { DefaultPermissionPreset, LoginMethod } from '../types'
 import { QrCode } from '../ui/qr-code'
-import Svg, { Path, Polygon } from 'react-native-svg'
+import Svg, { Path } from 'react-native-svg'
 import { FISH_LOGO_PATH, FISH_LOGO_VIEWBOX } from '../ui/fish-logo'
 import { GithubIcon, GoogleIcon, ZhihuIcon } from '../ui/brand-icons'
-import { darkColors, floatingShadow, lightColors, radius, spacing, type } from '../ui/theme'
+import { floatingShadow, radius, spacing, type } from '../ui/theme'
 import { useTheme, type ThemeColors } from '../ui/theme-context'
 import { useResponsiveLayout } from '../ui/responsive'
 import { useThemedStyles } from '../ui/use-themed-styles'
@@ -752,24 +752,25 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
 
   return (
     <View style={styles.flex}>
-      <BlurHeaderFrame header={<TopBar title={zhCN.settings.title} onBack={onBack} />}>
+      <BlurHeaderFrame header={<TopBar plain title={zhCN.settings.title} onBack={onBack} />}>
         <Screen>
           <View style={[styles.contentColumn, landscape && { maxWidth: contentMaxWidth }]}>
             <SectionTitle>{zhCN.settings.appearance}</SectionTitle>
-            <GroupCard style={styles.themeCard}>
+            <GroupCard flat style={styles.themeCard}>
               <View style={styles.themeTiles} accessibilityRole="radiogroup">
-                {themeOptions().map(option => (
+                {themeOptions().map((option, index) => (
                   <ThemeTile
                     key={option.value}
                     value={option.value}
                     label={option.name}
+                    last={index === themeOptions().length - 1}
                     selected={option.value === themePreference}
                     onPress={() => void setThemePreference(option.value)}
                   />
                 ))}
               </View>
             </GroupCard>
-            <GroupCard style={styles.settingsGap}>
+            <GroupCard flat style={styles.settingsGap}>
               <GroupRow
                 first
                 icon={Type}
@@ -787,7 +788,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             </GroupCard>
 
             <SectionTitle>{zhCN.settings.language}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow
                 first
                 icon={Languages}
@@ -799,7 +800,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             </GroupCard>
 
             <SectionTitle>{zhCN.comfort.continueWork}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow
                 first
                 icon={History}
@@ -848,7 +849,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             {comfort.error !== undefined && <Text style={styles.preferenceError} accessibilityRole="alert">{comfort.error}</Text>}
 
             <SectionTitle>{zhCN.bots.dsBotSettings}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow
                 first
                 icon={Bot}
@@ -863,7 +864,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             </GroupCard>
 
             <SectionTitle>{zhCN.settings.defaultPermission}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <View accessibilityRole="radiogroup">
                 {([
                   { value: 'default', name: zhCN.settings.defaultPermissionHost, description: zhCN.settings.defaultPermissionHostDescription, icon: ShieldCheck },
@@ -891,7 +892,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             <Text style={styles.preferenceNote}>{zhCN.settings.defaultPermissionNote}</Text>
 
             <SectionTitle>{zhCN.settings.accountAndServer}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow first icon={Globe} label={zhCN.settings.server} value={config?.baseUrl?.replace(/^https?:\/\//, '') ?? zhCN.settings.notConfigured} />
               <GroupRow icon={UserRound} label={zhCN.settings.account} value={account ?? zhCN.settings.notSignedIn} />
               <GroupRow icon={KeyRound} label={zhCN.settings.loginMethod} value={loginMethodLabel(config?.loginMethod)} />
@@ -899,7 +900,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             </GroupCard>
 
             <SectionTitle>{zhCN.settings.transport}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               {transportPreferenceOptions().map((option, index) => {
                 const chosen = option.value === preference
                 return (
@@ -920,7 +921,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             <Text style={styles.preferenceNote}>{zhCN.settings.transportNote}</Text>
 
             <SectionTitle>{zhCN.settings.diagnostics}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow
                 first
                 icon={Terminal}
@@ -936,7 +937,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             </GroupCard>
 
             <SectionTitle>{zhCN.settings.identity}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow first icon={Smartphone} label={zhCN.settings.thisPhone} value={identity?.name ?? zhCN.settings.androidDevice} onPress={() => showIdentity(zhCN.settings.thisPhone, identity?.name)} disabled={!identity?.name} />
               <GroupRow icon={Hash} label={zhCN.settings.deviceId} value={identity?.deviceId ?? zhCN.common.unavailable} onPress={() => showIdentity(zhCN.settings.deviceId, identity?.deviceId)} disabled={!identity?.deviceId} />
               <GroupRow icon={Fingerprint} label={zhCN.settings.publicKey} value={identity?.publicKey || zhCN.common.unavailable} onPress={() => showIdentity(zhCN.settings.publicKey, identity?.publicKey)} disabled={!identity?.publicKey} />
@@ -945,7 +946,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
             <Text style={styles.preferenceNote}>{zhCN.settings.keyNote}</Text>
 
             <SectionTitle>{zhCN.settings.about}</SectionTitle>
-            <GroupCard>
+            <GroupCard flat>
               <GroupRow
                 first
                 icon={Download}
@@ -979,7 +980,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
               />
             </GroupCard>
 
-            <GroupCard style={styles.signOutCard}>
+            <GroupCard flat style={styles.signOutCard}>
               <GroupRow first icon={LogOut} label={zhCN.settings.signOut} danger chevron={false} onPress={confirmSignOut} />
               <GroupRow icon={RotateCcw} label={zhCN.settings.resetLocal} danger chevron={false} onPress={confirmReset} />
             </GroupCard>
@@ -995,7 +996,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
               <IconButton label={zhCN.common.close} icon={X} onPress={() => setLanguagePickerOpen(false)} />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.languageList}>
-              <GroupCard>
+              <GroupCard flat>
                 {languageOptions().map((option, index) => {
                   const chosen = option.value === languagePreference
                   return (
@@ -1028,7 +1029,7 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
               <IconButton label={zhCN.common.close} icon={X} onPress={() => setDensityPickerOpen(false)} />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.languageList}>
-              <GroupCard>
+              <GroupCard flat>
                 {([
                   { value: 'standard' as const, name: zhCN.settings.densityStandard },
                   { value: 'compact' as const, name: zhCN.settings.densityCompact },
@@ -1058,38 +1059,20 @@ export function SettingsScreen({ onBack, onReset, onOpenDiagnostics, onOpenAbout
   )
 }
 
-/** Appearance choice drawn as a miniature page, as in the reference settings. */
-function ThemeTile({ value, label, selected, onPress }: { value: ThemePreference; label: string; selected: boolean; onPress: () => void }) {
+/** Official appearance choice: icon over label inside a hairline option card. */
+function ThemeTile({ value, label, selected, onPress, last }: { value: ThemePreference; label: string; selected: boolean; onPress: () => void; last?: boolean }) {
+  const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
-  const light = lightColors
-  const dark = darkColors
-  const page = (palette: typeof lightColors) => (
-    <View style={[StyleSheet.absoluteFill, styles.themeTilePage]}>
-      <View style={[styles.themeTileLine, { width: '58%', backgroundColor: palette.subtle }]} />
-      <View style={[styles.themeTileLine, { width: '38%', backgroundColor: palette.subtle, opacity: 0.6 }]} />
-      <View style={[styles.themeTileDot, { backgroundColor: palette.primary }]} />
-    </View>
-  )
+  const Icon = value === 'light' ? Sun : value === 'dark' ? Moon : Smartphone
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityLabel={label}
       accessibilityState={{ checked: selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.themeTile, pressed && { opacity: 0.8 }]}
+      style={({ pressed }) => [styles.themeTile, last && styles.themeTileWide, selected && styles.themeTileSelected, pressed && { opacity: 0.85 }]}
     >
-      <View style={[styles.themeTileFrame, selected && styles.themeTileFrameSelected]}>
-        <View style={[styles.themeTileScreen, { backgroundColor: value === 'dark' ? dark.surface : light.surface }]}>
-          {value !== 'system' && page(value === 'dark' ? dark : light)}
-          {value === 'system' && <>
-            {page(light)}
-            <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 64" preserveAspectRatio="none">
-              <Polygon points="100,0 100,64 0,64" fill={dark.surface} />
-            </Svg>
-            <View style={[styles.themeTileDot, { backgroundColor: dark.primary }]} />
-          </>}
-        </View>
-      </View>
+      <Icon size={20} color={selected ? colors.primary : colors.ink} strokeWidth={1.8} />
       <Text style={[styles.themeTileLabel, selected && styles.themeTileLabelSelected]} numberOfLines={1}>{label}</Text>
     </Pressable>
   )
@@ -1703,16 +1686,24 @@ function createStyles(colors: ThemeColors) {
   keyNote: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.md },
   settingsGap: { marginTop: spacing.sm },
   themeCard: { paddingHorizontal: spacing.sm, paddingVertical: spacing.md },
-  themeTiles: { flexDirection: 'row', gap: spacing.sm },
-  themeTile: { flex: 1, alignItems: 'center', gap: spacing.xs },
-  themeTileFrame: { alignSelf: 'stretch', padding: 3, borderRadius: radius.lg + 2, borderWidth: 2, borderColor: 'transparent' },
-  themeTileFrameSelected: { borderColor: colors.primary },
-  themeTileScreen: { aspectRatio: 1.55, borderRadius: radius.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  themeTilePage: { padding: 10, gap: 5 },
-  themeTileLine: { height: 4, borderRadius: 2 },
-  themeTileDot: { position: 'absolute', right: 10, bottom: 10, width: 12, height: 12, borderRadius: 6 },
-  themeTileLabel: { ...type.small, fontSize: 15, color: colors.ink },
-  themeTileLabelSelected: { color: colors.primary, fontWeight: '600' },
+  themeTiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  themeTile: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    minHeight: 92,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.grouped,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  themeTileWide: { flexBasis: '100%' },
+  themeTileSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  themeTileLabel: { fontSize: 14, lineHeight: 20, color: colors.ink, includeFontPadding: false },
+  themeTileLabelSelected: { color: colors.linkText, fontWeight: '600' },
   densityRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.md, paddingRight: spacing.md, paddingTop: spacing.md },
   densityIcon: { width: 28, marginRight: spacing.sm, alignItems: 'center' },
   densityCopy: { flex: 1, gap: 2 },
