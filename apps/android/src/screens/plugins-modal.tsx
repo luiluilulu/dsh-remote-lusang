@@ -30,7 +30,7 @@ import {
   type SchemaField,
 } from '../services/plugin-inventory'
 import { sessionToolsError } from './session-tools-error'
-import { floatingShadow, radius, spacing, type } from '../ui/theme'
+import { radius, spacing, type } from '../ui/theme'
 import { useTheme, type ThemeColors } from '../ui/theme-context'
 import { useThemedStyles } from '../ui/use-themed-styles'
 
@@ -567,33 +567,33 @@ function SettingsForm({ settings, writable, onSaved }: {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
+    container: { flex: 1, backgroundColor: colors.chatCanvas },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: spacing.md,
-      height: 64,
-      backgroundColor: colors.background,
+      paddingHorizontal: 12,
+      height: 56,
+      backgroundColor: colors.chatCanvas,
     },
-    headerBtn: { width: 44, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.elevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, ...floatingShadow(colors) },
-    headerTitle: { ...type.heading, fontSize: 17, lineHeight: 22, fontWeight: '700', letterSpacing: -0.2, flex: 1, color: colors.ink, textAlign: 'center' },
+    headerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { ...type.heading, fontSize: 15, lineHeight: 22, fontWeight: '600', flex: 1, color: colors.ink, textAlign: 'center' },
     content: { padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.sm },
-    subtitle: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.muted, marginBottom: spacing.xs, paddingHorizontal: spacing.md },
-    sectionTitle: { ...type.small, fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.muted, marginTop: spacing.md, paddingHorizontal: spacing.md },
+    subtitle: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.faint, marginBottom: spacing.xs, paddingHorizontal: spacing.md },
+    sectionTitle: { ...type.small, fontSize: 12, lineHeight: 18, fontWeight: '500', color: colors.sidebarSection, marginTop: spacing.md, paddingHorizontal: spacing.md },
     section: { gap: spacing.xs },
-    sectionHint: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.muted, paddingHorizontal: spacing.md },
+    sectionHint: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.faint, paddingHorizontal: spacing.md },
     group: {
-      backgroundColor: colors.card,
-      borderRadius: radius.xl,
+      backgroundColor: colors.cardOpaque,
+      borderRadius: 12,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.separator,
+      borderColor: colors.hairline,
       overflow: 'hidden',
     },
-    item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
+    item: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: 8 },
     itemMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0, paddingRight: spacing.xs },
     itemAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },
     itemChevron: { padding: spacing.xs, alignItems: 'center', justifyContent: 'center' },
-    itemDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    itemDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
     iconImage: { width: 26, height: 26 },
     badgeRemote: { color: colors.success, backgroundColor: colors.successSoft },
     featureBox: {
@@ -654,7 +654,7 @@ function createStyles(colors: ThemeColors) {
     },
     cardText: { flex: 1, minWidth: 0, gap: 2 },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-    cardTitle: { ...type.bodyStrong, fontSize: 16, lineHeight: 22, color: colors.ink, flexShrink: 1 },
+    cardTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.ink, flexShrink: 1 },
     badge: {
       ...type.caption,
       fontSize: 12,
@@ -667,8 +667,8 @@ function createStyles(colors: ThemeColors) {
       borderRadius: radius.pill,
       overflow: 'hidden',
     },
-    cardDescription: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.muted },
-    meta: { ...type.caption, fontSize: 12, lineHeight: 16, color: colors.muted },
+    cardDescription: { ...type.small, fontSize: 13, lineHeight: 18, color: colors.faint },
+    meta: { ...type.caption, fontSize: 12, lineHeight: 16, color: colors.faint },
     form: { gap: spacing.sm },
     field: {
       gap: spacing.xs,
