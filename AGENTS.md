@@ -1,5 +1,40 @@
 # Repository Guide for Agents
 
+## Official DeepSeek App UI replication, batches 1–2 (`feat/official-ui`, 2026-11-13)
+
+按用户要求复刻官方 DeepSeek App（参照 `deepseek-ai/chat-demo` 的线上 Demo 与源码），
+纯 Android 展示层改动，未触碰 Host、协议、allowlist、依赖与构建配置。设计事实源（token、
+组件规格、官方截图、批次计划）保存在已忽略的 `artifacts/research/lead-ref/OFFICIAL-UI-REFERENCE.md`。
+
+批次 1（`f5097ff5`）：`ui/theme.ts` 换成官方色板（品牌 `#3964FE`、浅色画布 `#FFFFFF`、
+深色 `#151517`、深色卡面 `#2C2C2E`、三级文本 `#81858C`）并新增 `chatCanvas` / `chatBubble` /
+`composerFill` / `hairline` / `faint` token 与 `composerShadow`；`chat/messages.tsx` 欢迎页
+去掉蓝鲸 Logo、「探索未至之境」与预览徽章，改为官方单行居中问候（手机 20/28 500、≥440dp
+24/32 600），七语言新增 `chat.welcomeGreeting` 并删除不再使用的 `welcomeSlogan`/`welcomeBadge`
+样式；`chat/composer.tsx` 与 `chat/styles.ts` 把输入区做成官方卡片（24dp 圆角、1px hairline、
+`padding 12/16`、34dp 裸图标动作钮、34dp 品牌圆发送按钮、禁用时 `opacity .4`、11/16 居中
+disclaimer）；用户消息改为右对齐 22dp 圆角气泡（`colors.chatBubble`、10/16 内边距、16/24 文本、
+正文用纯 Text 与官方 pre-wrap 一致），助手正文继续直接落在画布上。
+
+批次 2（`20b1815d`）：`ui/components.tsx` 的 `TopBar` 新增 `plain` 变体——不透明画布、
+无浮动胶囊、裸 36–40dp 图标钮、14/22 500 居中标题；`chat-screen.tsx` 聊天页改用 plain 头部，
+空会话只保留菜单按钮与无标题状态，连接/同步提示条改成细 hairline 胶囊；`host-sessions-drawer.tsx`
+按官方侧栏重做：宽 `min(300, 100vw-48)`、`sidebarFill` 底色与右缘 hairline、品牌名 20/22 600
+品牌蓝并删除黑色 HARNESS 徽章、品牌行下方新增全宽 40dp「新对话」胶囊（复用既有
+`onNewSession`，Lead 在 `chat-screen.tsx` 接线 `startNewSession()`，仅智能体模式渲染）、
+工作区/会话行全部去卡片化（36dp 高、8dp 圆角、hover/选中用 `sidebarHover`/`sidebarActive`、
+文字 14dp）、分组标题 12/18 500 三级色、搜索框 40dp 胶囊、底部主机行改设置式（12dp 圆角）；
+`ui/theme.ts` 增补 `sidebarFill` / `sidebarBorder` / `sidebarHover` / `sidebarActive` /
+`sidebarActiveText` / `sidebarSection` / `sidebarActionFill`。抽屉功能（搜索、三种分组、
+工作区树、拖拽排序、收藏、归档、置顶、重命名、模式切换、Bot 区、主机切换与设置）未改逻辑。
+
+验证与边界：`apps/android` 类型检查 0 错误；模拟器实拍浅色/深色欢迎页、输入区、用户气泡、
+生成中折叠态（`artifacts/research/lead-ref/emu-0[1-2]*.png`），抽屉批次 2 仅在中途热更新时
+截到品牌行与扁平行局部，完整抽屉/头部视觉验收未完成（模拟器随后在系统 ANR 下不可用）。
+未构建 APK、未真机验收、未测 TalkBack/大字体/横屏/平板分栏。批次 3（设置与模型/权限选择器
+Modal 化）与批次 4（Markdown 16/28、消息操作行细节）尚未开始；Markdown 行高本轮刻意未动，
+避免改变历史阅读位置。按 Test Policy 未新增展示类自动化测试。
+
 ## Android offline composer drafts (Issue #7 / upstream #409, 2026-11-12)
 
 Android 聊天输入框不再随连接状态禁用。新增 `apps/android/src/screens/chat/composer-gate.ts`
