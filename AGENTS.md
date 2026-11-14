@@ -1,5 +1,19 @@
 # Repository Guide for Agents
 
+## 版本号与发布节奏（2026-11-14 用户明确要求）
+
+**小修不单独发版。** 用户不接受「一个按钮/一个跳转的小修复就 bump 一个小版本号并发 Release」。
+发版节奏约定：
+
+- 日常修复（UI 细节、单点 bug、文案、token 微调）只提交到 `feat/ux-fixes`，**不 bump versionName/versionCode，不打 tag，不发 GitHub Release**；真机验收也放到下一次成批发版时一起做。
+- 攒到一批（或用户明确说「发个版本」）再发一次：
+  - 功能批次 → `0.6.4-own.N+1`（versionCode +1）；
+  - 小修批次 → 优先用补丁位 `0.6.4-own.N.1` / `.2`，只有攒够新功能才升 `N`。
+- Android 安装要求 `versionCode` 每次发版必须递增（不能同号覆盖），所以补丁版本的 versionCode 仍按 +1 递增，但 **versionName 用补丁位**，用户可见的版本号不会因小修跳大版本。
+- 发布仍必须：annotated tag → 推 `feat/ux-fixes` 与 tag → **带 APK 附件的 GitHub Release**（否则应用内更新无法下载）。
+- `apps/android/src/services/app-update.ts` 的 `isNewerVersion` 需支持 `-own.N.M` 补丁后缀比较（当前只解析 `-own.N`，在首次使用补丁版本时与版本支持一起实现，不单独发版）。
+- 分支模型：特性分支从 `feat/ux-fixes` 拉出 → 完成 → fast-forward 合回 `feat/ux-fixes` → 随下一次成批发版打 tag。
+
 ## Official DeepSeek App UI replication, batches 1–2 (`feat/official-ui`, 2026-11-13)
 
 按用户要求复刻官方 DeepSeek App（参照 `deepseek-ai/chat-demo` 的线上 Demo 与源码），
