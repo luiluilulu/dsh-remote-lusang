@@ -100,42 +100,40 @@ class RemoteForegroundServiceModule(
 
   @ReactMethod
   fun requestIgnoreBatteryOptimizations(promise: Promise) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-      if (pm != null && pm.isIgnoringBatteryOptimizations(context.packageName)) {
-        promise.resolve(true)
-        return
-      }
-      try {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-          data = Uri.parse("package:${context.packageName}")
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-        promise.resolve(true)
-      } catch (_: Exception) {
-        try {
-          val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-          }
-          context.startActivity(fallback)
-          promise.resolve(true)
-        } catch (_: Exception) {
-          try {
-            val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-              data = Uri.parse("package:${context.packageName}")
-              addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(appDetails)
-            promise.resolve(true)
-          } catch (e: Exception) {
-            promise.reject("BATTERY_SETTING_FAILED", e.message)
-          }
-        }
-      }
-    } else {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
       promise.resolve(true)
+      return
     }
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    val alreadyIgnoring = pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+    // Already exempt: the request dialog is a silent no-op there, so land the user on
+    // a system battery page instead of resolving without any visible result.
+    if (!alreadyIgnoring && openSystemIntent(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+        data = Uri.parse("package:${context.packageName}")
+      })) {
+      promise.resolve(true)
+      return
+    }
+    if (openSystemIntent(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))) {
+      promise.resolve(true)
+      return
+    }
+    if (openSystemIntent(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:${context.packageName}")
+      })) {
+      promise.resolve(true)
+      return
+    }
+    promise.reject("BATTERY_SETTING_FAILED", "No system battery settings activity is available")
+  }
+
+  /** Starts a settings activity from the app context and reports whether a handler existed. */
+  private fun openSystemIntent(intent: Intent): Boolean = try {
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+    true
+  } catch (_: Exception) {
+    false
   }
 
   override fun invalidate() {
