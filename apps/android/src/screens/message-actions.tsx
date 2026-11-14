@@ -223,7 +223,7 @@ export function MessageActions({ item }: { item: ChatMessage }) {
       style={[styles.actionBtn, !branchAvailable && styles.branchUnavailable]}
       onPress={branch}
     >
-      <IconBranchOutline size={14} color={colors.muted} />
+      <IconBranchOutline size={16} color={colors.muted} />
     </Pressable>
   )
 
@@ -243,9 +243,9 @@ export function MessageActions({ item }: { item: ChatMessage }) {
             onPress={handleCopy}
           >
             {copied ? (
-              <IconCheckOutline size={14} color={colors.primary} />
+              <IconCheckOutline size={16} color={colors.primary} />
             ) : (
-              <IconCopyOutline size={14} color={colors.muted} />
+              <IconCopyOutline size={16} color={colors.muted} />
             )}
           </Pressable>
         </Animated.View>
@@ -270,9 +270,9 @@ export function MessageActions({ item }: { item: ChatMessage }) {
             onPress={handleCopy}
           >
             {copied ? (
-              <IconCheckOutline size={14} color={colors.primary} />
+              <IconCheckOutline size={16} color={colors.primary} />
             ) : (
-              <IconCopyOutline size={14} color={colors.muted} />
+              <IconCopyOutline size={16} color={colors.muted} />
             )}
           </Pressable>
         </Animated.View>
@@ -285,7 +285,7 @@ export function MessageActions({ item }: { item: ChatMessage }) {
             style={styles.usageBtn}
             onPress={() => setUsageOpen(true)}
           >
-            <IconDatabaseOutline size={14} color={colors.muted} />
+            <IconDatabaseOutline size={16} color={colors.muted} />
             <Text numberOfLines={1} style={[styles.usageText, { color: colors.muted }]}>
               {usageLabel}
             </Text>
@@ -319,10 +319,10 @@ const styles = StyleSheet.create({
   assistantRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    minHeight: 32,
-    paddingTop: 8,
-    paddingBottom: 2,
+    gap: 10,
+    minHeight: 28,
+    paddingTop: 6,
+    paddingBottom: 0,
   },
   timeText: {
     fontSize: 12,
