@@ -90,6 +90,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
       )}
       {compactRunning ? <View style={[styles.composerCard, styles.runningComposer]}>
         <Pressable accessibilityRole="button" accessibilityLabel={strings.chat.moreActions} onPress={onOpenActions}
+          hitSlop={6}
           style={({ pressed }) => [styles.plusButton, pressed && styles.plusPressed]}>
           <Plus size={22} color={colors.ink} />
         </Pressable>
@@ -99,6 +100,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={strings.chat.stop} disabled={stopping}
           accessibilityState={{ disabled: stopping, busy: stopping }} onPress={onStop}
+          hitSlop={6}
           style={({ pressed }) => [styles.stopButton, pressed && !stopping && styles.stopPressed]}>
           {stopping ? <ActivityIndicator size="small" color={colors.white} /> : <CircleStop size={20} color={colors.white} />}
         </Pressable>
@@ -171,14 +173,14 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
             accessibilityState={{ disabled: composerDisabled, expanded: promptsPickerOpen }}
             disabled={composerDisabled}
             onPress={onOpenPrompts}
-            hitSlop={{ top: 8, bottom: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={({ pressed }) => [styles.plusButton, pressed && styles.plusPressed, composerDisabled && styles.plusDisabled]}
           >
             <Zap size={18} color={connected ? colors.ink : colors.disabled} strokeWidth={1.9} />
           </Pressable>
           <View style={styles.composerSpacer} />
           {model.available && (
-            <Pressable accessibilityRole="button" accessibilityLabel={strings.chat.selectModel} onPress={model.onOpen} style={styles.modelChip}>
+            <Pressable accessibilityRole="button" accessibilityLabel={strings.chat.selectModel} onPress={model.onOpen} hitSlop={{ top: 5, bottom: 5 }} style={styles.modelChip}>
               <Text style={styles.modelChipText} numberOfLines={1}>{model.label}</Text>
               {model.selecting ? <ActivityIndicator size="small" color={colors.muted} /> : <ChevronDown size={14} color={colors.muted} />}
             </Pressable>
@@ -190,6 +192,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
               accessibilityState={{ disabled: stopping, busy: stopping }}
               disabled={stopping}
               onPress={onStop}
+              hitSlop={6}
               style={({ pressed }) => [styles.stopButton, pressed && !stopping && styles.stopPressed, stopping && styles.sendDisabled]}
             >
               {stopping
@@ -208,6 +211,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
                   accessibilityState={{ disabled: stopping, busy: stopping }}
                   disabled={stopping}
                   onPress={onStop}
+                  hitSlop={6}
                   style={({ pressed }) => [styles.stopButtonSmall, pressed && !stopping && styles.stopPressed, stopping && styles.sendDisabled]}
                 >
                   {stopping
@@ -221,6 +225,7 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
                 accessibilityState={{ disabled: sendDisabled }}
                 disabled={sendDisabled}
                 onPress={onSubmit}
+                hitSlop={6}
                 style={({ pressed }) => [styles.sendButton, pressed && styles.sendPressed, sendDisabled && styles.sendDisabled]}
               >
                 <ArrowUp size={18} color={colors.white} strokeWidth={2.4} />

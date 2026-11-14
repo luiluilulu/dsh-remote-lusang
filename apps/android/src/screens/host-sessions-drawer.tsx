@@ -1049,6 +1049,7 @@ export function HostSessionsDrawer({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={strings.chat.newChat}
+          hitSlop={{ top: 2, bottom: 2 }}
           onPress={() => {
             Keyboard.dismiss()
             void handleNewSession()
@@ -1265,6 +1266,7 @@ export function HostSessionsDrawer({
               return (
                 <Pressable
                   accessibilityRole="button"
+                  hitSlop={{ top: 4, bottom: 4 }}
                   onPress={() => toggleWorkspace(section.id)}
                   onLongPress={() => {
                     if (!matchedWorkspace) return
@@ -1375,6 +1377,7 @@ export function HostSessionsDrawer({
               accessibilityRole="button"
               accessibilityLabel={accessibilityLabel}
               accessibilityState={{ selected: isSelected }}
+              hitSlop={{ top: 4, bottom: 4 }}
               onPress={() => {
                 if (justDraggedRef.current || dragState !== null) return
                 if (isSelected) closeDrawer()

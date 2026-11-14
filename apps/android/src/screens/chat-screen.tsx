@@ -1199,6 +1199,7 @@ export function ChatScreen({
           accessibilityLabel={connectionRetrying ? strings.chat.reconnecting : strings.chat.offline}
           accessibilityState={{ disabled: connectionRetrying, busy: connectionRetrying }}
           accessibilityLiveRegion="polite" disabled={connectionRetrying}
+          hitSlop={{ top: 7, bottom: 7 }}
           onPress={() => void reconnectCurrentSession()}>
           <View style={styles.connectionDot} />
           <Text style={styles.connectionBannerText}>
