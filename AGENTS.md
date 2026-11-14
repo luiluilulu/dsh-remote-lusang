@@ -11,16 +11,19 @@
   时通过 `hostCapabilities()` 宣告 `speech.remote.v1`；Android 原生
   `plugins/remote-foreground-service/RemoteAudioRecorderModule.kt`（`DshRemoteAudioRecorder`）
   录 16 kHz mono PCM16 WAV，经 `speech/transcribe` 在电脑端转写后回填草稿，args 约定
-  `{ request: { audioBase64, language } }`。TTS/OCR/Search/Fetch 待 recon 与实现。
+  `{ request: { audioBase64, language } }`。TTS/OCR/Fetch/Search 均已实现为 Host 自建端点
+  `appApi.tts|ocr|fetch|search`（能力 `app-api.v1` / `app-api.search.v1`，搜索 key 只读
+  `DSH_REMOTE_SEARCH_KEY`），设计见 `docs/design/APP-API-INTEGRATION.md`。
   API key 只存电脑端由 Host 代理，手机不落地，不打印密钥。
 - **A 线（复刻官方 DeepSeek App UI）**：批次 1–4 已完成聊天页、抽屉、设置、Markdown 主要对齐；
   次级页面（Bot 模式、插件页、自动化任务页、设备列表/主机切换）也已扁平官方化，差距清单见
   `docs/design/OFFICIAL-UI-ALIGNMENT.md`。设计事实源：
   `artifacts/research/lead-ref/OFFICIAL-UI-REFERENCE.md`（已忽略，不入库）。
-- **own.14 已备好、未发布**：APK 已构建（`artifacts/android-build/apk/dsh-remote-own-0.6.4-own14-arm64.apk`，
-  65,811,469 B），Host 插件 tarball 已打包（`artifacts/android-build/plugin-release/`）。
-  卡在：GitHub 推送需要代理（本机直连被重置）、真机验收需用户配合；本地安装插件会要求重启 DSH。
-  发版流程见 `docs/RELEASE.md`。
+- **own.14 已发布（2026-11-14）**：`v0.6.4-own.14` tag + GitHub Release
+  （`https://github.com/luiluilulu/dsh-remote-lusang/releases/tag/v0.6.4-own.14`，APK 附件
+  65,811,469 B，SHA256 `CBAA8C2A…5FD4AB21`）；Android `0.6.4-own.14` / versionCode 84。
+  Host 插件新能力的本地包在 `artifacts/android-build/plugin-release/`（未提交 dist）；
+  发版流程见 `docs/RELEASE.md`。真机验收项待用户回归：语音输入、朗读、取字、链接总结、网页搜索。
 
 ## 版本号与发布节奏（用户明确要求）
 
