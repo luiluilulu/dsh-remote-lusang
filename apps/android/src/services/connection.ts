@@ -27,6 +27,7 @@ export interface AndroidConnectionOptions {
 export class AndroidRemoteConnection {
   private compactHistorySupported = false
   private pluginRouteSupported = false
+  private speechSupported = false
   private core?: RemoteClientCore
   private proxy?: RemoteHarnessClient
   private codex?: CodexRemoteClient
@@ -145,6 +146,7 @@ export class AndroidRemoteConnection {
         this.cursor = undefined
         this.acpBackends.clear()
         this.sessionTools = undefined
+        this.speechSupported = false
         options.onClose?.({ retryable: retryableClose, ...(lastTransport !== undefined ? { lastTransport } : {}) })
       })
       await core.connect()
@@ -213,6 +215,9 @@ export class AndroidRemoteConnection {
 
   private applyBackendFeatures(core: RemoteClientCore, features: RemoteHostFeatures): void {
     this.pluginRouteSupported = features.pluginRoute
+    // Official experimental speech Remote namespace; the Host advertises it only
+    // when its composition provides the speechController service.
+    this.speechSupported = features.capabilities.includes('speech.remote.v1')
     this.codexAvailable = features.capabilities.includes('codex.appserver.transfer.v1')
       && remoteWorkspaceTypeAvailable(features.capabilities, features.workspaceTypes, 'codex', 'codex.appserver.v1')
     if (this.codexAvailable) this.codex ??= new CodexRemoteClient(core, true)
@@ -283,6 +288,36 @@ export class AndroidRemoteConnection {
   async rpc<T = unknown>(method: string, params: unknown, signal?: AbortSignal): Promise<T> {
     if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
     return this.core.rpc<T>(method, params, signal)
+  }
+
+  /** The connected Host advertises the official experimental speech namespace. */
+  supportsVoiceInput(): boolean {
+    return this.core !== undefined && this.speechSupported
+  }
+
+  /**
+   * Transcribe one canonical base64 WAV through the Host's official speech
+   * Remote namespace. Large recordings automatically use the gateway transfer
+   * path, so the phone never needs an API key and audio stays on the computer.
+   */
+  async transcribeVoice(audioBase64: string, language: string | undefined, signal?: AbortSignal): Promise<string> {
+    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
+    if (!this.speechSupported) throw new Error(strings.chat.voiceUnavailable)
+    const args: Record<string, unknown> = { audioBase64 }
+    if (language !== undefined && language !== '') args.language = language
+    const value = await new RemoteTypertGateway(this.core).call<unknown>(
+      'speech/transcribe',
+      // Typert maps `args` entries to the method parameters by name; the
+      // controller signature is `transcribe(request, signal)`.
+      { args: { request: args } },
+      signal,
+      { maxResponseBytes: 4 * 1024 * 1024 },
+    )
+    const text = typeof value === 'object' && value !== null && 'text' in value
+      ? (value as { text?: unknown }).text
+      : undefined
+    if (typeof text !== 'string' || text.trim() === '') throw new Error(strings.chat.voiceEmpty)
+    return text.trim()
   }
 
   /** Optional CodeX business client; available only when the Host advertises both domain capabilities. */

@@ -12,11 +12,16 @@ DSH 自带官方实验性语音 Remote 命名空间（`@deepseek-ai/dsh-experime
 `hostCapabilities()` 宣告 `speech.remote.v1`（`index.ts` 从 ctx/root 探测服务，见
 `speechAvailable`；`HOST_CAPABILITIES` 常量同步包含该能力名）。
 
-后续 Android 侧仍需：录音依赖（Expo SDK 57 的 `expo-audio`）、`RECORD_AUDIO` 权限、
-录音转 16k mono PCM16 WAV（否则需 Host 侧 ffmpeg 转码，用户 PC 已装 ffmpeg）、把 base64
-经既有 `harness.remote.call` 发到 `speech/transcribe` 并回填草稿；朗读（TTS）官方暂无
-Remote 命名空间，需要自建 SAPI 桥或后续方案。本轮只做 Host 侧放行与能力探测，未改协议文档、
-未重建 Host bundle dist、未做 Android 端与真机验证。
+Android 侧 MVP-0 已实现（未发版）：`plugins/remote-foreground-service/RemoteAudioRecorderModule.kt`
+（原生注册名 `DshRemoteAudioRecorder`）用 `AudioRecord` 直接录 16 kHz mono PCM16 并写 44 字节
+RIFF 头，`start/stop/cancel` 返回 `{path, base64, bytes, durationMs}`，4 MiB / 120 s 上限；
+`services/voice.ts` 管 `RECORD_AUDIO` 权限与语言提示，`screens/chat/use-voice-input.ts` 管
+idle/recording/transcribing，`chat-screen.tsx` 只在 Harness 会话且 Host 宣告
+`speech.remote.v1` 时接线，`chat/composer.tsx` 增加麦克风按钮与录音条（计时/取消/确认）；
+网关调用为 `speech/transcribe` + `{ args: { request: { audioBase64, language } } }`
+（Typert 按参数名映射，单参数方法用 `request`），识别文本回填草稿。已放弃 `expo-audio`
+（锁文件回滚），不引入 ffmpeg。朗读（TTS）官方暂无 Remote 命名空间，需要自建 SAPI 桥；
+OCR/Search/Fetch 未开始。本轮未重建 Host bundle dist、未构建 APK、未做真机录音识别验收。
 
 ## 版本号与发布节奏（2026-11-14 用户明确要求）
 

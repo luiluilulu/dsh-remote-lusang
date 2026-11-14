@@ -319,6 +319,12 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     runningComposerText: { ...t.small, color: colors.muted },
     composerControls: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, padding: 12 },
     composerSpacer: { flex: 1 },
+    // Voice capture mirrors the official hold-to-talk bar: live dot, mm:ss timer,
+    // cancel and a brand confirm disc.
+    voiceRecordingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 60, paddingHorizontal: 16, paddingVertical: 14 },
+    voiceDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
+    voiceTimer: { ...t.smallStrong, fontVariant: ['tabular-nums'], color: colors.ink, minWidth: 44 },
+    voiceHint: { ...t.small, color: colors.muted, flexShrink: 1 },
     // Keep the actual target at the Android 44dp minimum; the official icon buttons
     // render as bare 34px glyphs inside the function row.
     plusButton: {

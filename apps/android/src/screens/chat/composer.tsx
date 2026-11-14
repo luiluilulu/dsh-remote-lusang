@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronDown, CircleStop, Plus, Zap } from 'lucide-react-native'
+import { ArrowUp, Check, ChevronDown, CircleStop, Mic, Plus, X, Zap } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
@@ -35,6 +35,19 @@ const BACKEND_CHAT_TEXT_KEYS: Partial<Record<string, BackendChatTextKeys>> & { h
 /** Soft hint threshold; the composer accepts longer input instead of silently truncating. */
 const LONG_DRAFT_HINT = 12_000
 
+export type ComposerVoiceState = {
+  available: boolean
+  phase: 'idle' | 'recording' | 'transcribing'
+  elapsedMs: number
+  onToggle: () => void
+  onCancel: () => void
+}
+
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
 type Props = {
   backend: RemoteSession['backend']
   draft: string
@@ -53,6 +66,7 @@ type Props = {
   compactComposer: boolean
   composerInputMaxHeight: number
   model: { available: boolean; label: string | undefined; selecting: boolean; onOpen: () => void }
+  voice: ComposerVoiceState
   promptsPickerOpen: boolean
   onExpand: () => void
   onOpenExpand?: () => void
@@ -64,7 +78,7 @@ type Props = {
 
 export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, replyActive, stopping, compactRunning,
   hasComposerContent, connected, editable, composerDisabled, sendDisabled, compactComposer,
-  composerInputMaxHeight, model, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSubmit, onStop }: Props) {
+  composerInputMaxHeight, model, voice, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSubmit, onStop }: Props) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
   const { composerInputRef, mentionType, mentionGroups, selection, closeMention, onChangeText, onSelectionChange } = input
@@ -105,6 +119,37 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
           {stopping ? <ActivityIndicator size="small" color={colors.white} /> : <CircleStop size={20} color={colors.white} />}
         </Pressable>
       </View> : <View style={styles.composerCard}>
+        {voice.phase === 'recording' ? (
+          <View style={styles.voiceRecordingRow}>
+            <View style={styles.voiceDot} />
+            <Text accessibilityLiveRegion="polite" style={styles.voiceTimer}>{formatElapsed(voice.elapsedMs)}</Text>
+            <Text numberOfLines={1} style={styles.voiceHint}>{strings.chat.voiceRecording}</Text>
+            <View style={styles.composerSpacer} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.common.cancel}
+              onPress={voice.onCancel}
+              hitSlop={8}
+              style={({ pressed }) => [styles.plusButton, pressed && styles.plusPressed]}
+            >
+              <X size={18} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.chat.voiceInput}
+              onPress={voice.onToggle}
+              hitSlop={6}
+              style={({ pressed }) => [styles.sendButton, pressed && styles.sendPressed]}
+            >
+              <Check size={18} color={colors.white} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+        ) : voice.phase === 'transcribing' ? (
+          <View style={styles.voiceRecordingRow}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <Text numberOfLines={1} style={styles.voiceHint}>{strings.chat.voiceTranscribing}</Text>
+          </View>
+        ) : <>
         {draft.length > 0 && !compactRunning && onOpenExpand !== undefined && (
           <Pressable
             accessibilityRole="button"
@@ -185,6 +230,19 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
               {model.selecting ? <ActivityIndicator size="small" color={colors.muted} /> : <ChevronDown size={14} color={colors.muted} />}
             </Pressable>
           )}
+          {voice.available && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.chat.voiceInput}
+              accessibilityState={{ disabled: composerDisabled }}
+              disabled={composerDisabled}
+              onPress={voice.onToggle}
+              hitSlop={6}
+              style={({ pressed }) => [styles.plusButton, pressed && styles.plusPressed, composerDisabled && styles.plusDisabled]}
+            >
+              <Mic size={19} color={connected ? colors.ink : colors.disabled} strokeWidth={1.9} />
+            </Pressable>
+          )}
           {replyActive && !hasComposerContent
             ? <Pressable
               accessibilityRole="button"
@@ -231,7 +289,8 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
                 <ArrowUp size={18} color={colors.white} strokeWidth={2.4} />
               </Pressable>
             </>}
-        </View>
+          </View>
+        </>}
       </View>}
     </View>
     {draft.length > LONG_DRAFT_HINT && (
