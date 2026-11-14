@@ -1193,7 +1193,7 @@ export function ChatScreen({
     }
     // A blank conversation carries nothing to lose: recreate it inside the
     // chosen workspace and archive the old placeholder so it reads as a move.
-    if (sessionBlank) await archiveSession(previousId)
+    if (sessionBlank && useAppStore.getState().selectedSession?.sessionId !== previousId) await archiveSession(previousId)
   }
 
   const pickWorkspace = (workspace: WorkspaceView) => {
