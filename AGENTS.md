@@ -14,8 +14,13 @@
   `{ request: { audioBase64, language } }`。TTS/OCR/Search/Fetch 待 recon 与实现。
   API key 只存电脑端由 Host 代理，手机不落地，不打印密钥。
 - **A 线（复刻官方 DeepSeek App UI）**：批次 1–4 已完成聊天页、抽屉、设置、Markdown 主要对齐；
-  剩余次级页面（插件/自动化/Bot/主机切换）。设计事实源：
+  次级页面（Bot 模式、插件页、自动化任务页、设备列表/主机切换）也已扁平官方化，差距清单见
+  `docs/design/OFFICIAL-UI-ALIGNMENT.md`。设计事实源：
   `artifacts/research/lead-ref/OFFICIAL-UI-REFERENCE.md`（已忽略，不入库）。
+- **own.14 已备好、未发布**：APK 已构建（`artifacts/android-build/apk/dsh-remote-own-0.6.4-own14-arm64.apk`，
+  65,811,469 B），Host 插件 tarball 已打包（`artifacts/android-build/plugin-release/`）。
+  卡在：GitHub 推送需要代理（本机直连被重置）、真机验收需用户配合；本地安装插件会要求重启 DSH。
+  发版流程见 `docs/RELEASE.md`。
 
 ## 版本号与发布节奏（用户明确要求）
 
@@ -101,7 +106,7 @@ fallback/reconnect 等核心状态机。纯展示 UI、文案、样式、非关�
 - 对外发布说明与 CHANGELOG 只写用户可感知的功能、修复、兼容性与贡献者；不附测试数量、构建命令、
   bundle 校验、未验收清单或构建警告。
 - 入口：`README.md`（英文默认，与 `README.en.md` 一致）、`README.zh.md`、`AGENTS.md`（本文件）、
-  `docs/TODO.md`、`docs/CHANGELOG.md`、`docs/PRIVACY.md`、`docs/design/{PRODUCT,DESIGN}.md`、
+  `docs/TODO.md`、`docs/CHANGELOG.md`、`docs/PRIVACY.md`、`docs/RELEASE.md`、`docs/design/{PRODUCT,DESIGN,APP-API-INTEGRATION,OFFICIAL-UI-ALIGNMENT}.md`、
   `apps/server/README*.md`、`docs/{server,protocol,plugin-integration}.md`、`docs/archive/vibe-coding.md`。
 - 文档范围或路径变化时同步更新相对链接与以上入口。
 
