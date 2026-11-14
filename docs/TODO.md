@@ -398,3 +398,17 @@ Typert Remote contract，不得在 Plugin Host 恢复 `sessions.*`、`session.se
 ## DSH-Go pairing acceptance
 
 Implement Dart mobile proof vectors, scanner/credential integration and Android end-to-end acceptance using docs/dsh-go-pairing-integration.md. C# Server/Remote integration uses a simulated Node phone, not an Android build. Local UI and `isTrusted` cannot establish genuine human presence against OS automation; use a trusted native primitive if Harness makes one available. No deployment/release is included.
+
+## B 线：官方能力全家桶 API（2026-11-14）
+
+设计文档：`docs/design/APP-API-INTEGRATION.md`。原则：能力全部在电脑端执行，API key 只存 Host 设置，
+手机不落地 key；端点走插件自建 RPC（固定 allowlist + Zod 校验），超 2 MiB 走既有 transfer。
+
+- [x] ASR 语音输入：Host allowlist 放行官方 speech Remote 命名空间 + `speech.remote.v1` 能力宣告；
+  Android 原生 16 kHz mono PCM16 WAV 录音、麦克风按钮与录音条、`speech/transcribe` 回填草稿（提交 `80ca1a8b`）。
+- [ ] MVP-1：Host `appApi/tts`（Windows SAPI，离线）+ `appApi/ocr`（Windows.Media.Ocr，离线）；
+  Android 朗读入口 + 原生播放模块、图片「取字」回填草稿。
+- [ ] MVP-2：Host `appApi/fetch`（Node fetch + 正文提取 + SSRF 防护）；Android 链接总结入口。
+- [ ] MVP-3：Host `appApi/search`（需用户自备搜索 key，仅存电脑端）；Android 搜索结果入口。
+- [ ] 官方后续若提供 TTS/OCR/Search/Fetch Remote 命名空间，优先切换并删除自建实现。
+
