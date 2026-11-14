@@ -15,8 +15,7 @@
 
 ## 剩余差距（按优先级）
 
-1. **次级页面仍是旧视觉**：
-   主机切换/设备列表局部、`session-info`。目标：改用官方分组列表/flat 卡片与 plain 顶栏。
+1. ~~次级页面旧视觉~~：设备列表/主机切换已于 2026-11-14 对齐（chatCanvas 画布、cardOpaque 12dp 卡片、hairline 分隔、52–56dp 行、sidebarHover 按压、裸 40dp 返回钮）；`session-info` 复用的 KeyValue/SectionTitle/ModalSurface 已是官方样式，无需改动。
    插件页（`plugins-modal`）已于 2026-11-14 对齐：plain 56dp 顶栏、扁平 12dp 圆角分组卡、52dp 行、hairline 分隔。
    自动化任务页（`automation-tasks-modal`）已于 2026-11-14 对齐顶栏与卡片：plain 40dp 顶栏按钮、列表/表单卡片 12dp 圆角 cardOpaque + hairline、56dp 任务行。
    Bot 模式（`bot-mode-screen` + `bot/styles.ts`）已于 2026-11-14 对齐：plain 顶栏（无浮动胶囊/内联消息）、
