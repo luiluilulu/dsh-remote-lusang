@@ -125,8 +125,8 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
               onPress={() => onRemoveQuote?.(index)}
               style={styles.composerInlineQuoteBadge}
             >
-              <QuoteMarkIcon size={14} color={colors.primary} />
-              <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.primary, maxWidth: 180 }]}>
+              <QuoteMarkIcon size={14} color={colors.linkText} />
+              <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.linkText, maxWidth: 180 }]}>
                 “{formatQuoteDraftSnippet(quoteText, 14)}”
               </Text>
             </Pressable>

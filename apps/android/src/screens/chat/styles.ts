@@ -16,7 +16,7 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     permissionChipDisabled: { opacity: 0.52 },
     modelChipText: { fontSize: 13, lineHeight: 20, fontWeight: '500', color: colors.ink, flexShrink: 1 },
     olderButton: { alignSelf: 'center', paddingVertical: isCompact ? 4 : spacing.xs, paddingHorizontal: spacing.md, marginBottom: isCompact ? 4 : spacing.sm },
-    olderText: { ...t.smallStrong, color: colors.primary },
+    olderText: { ...t.smallStrong, color: colors.linkText },
     modalBackdrop: { flex: 1, backgroundColor: colors.modalBackdrop, justifyContent: 'flex-end' },
     // Keep the sheet above the full-screen dismiss target on Android. Without an
     // explicit stacking order, the transparent backdrop can win hit testing on
@@ -84,7 +84,7 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     toolImages: { marginLeft: 32, marginRight: spacing.xs, marginBottom: spacing.sm },
     messageImage: { width: 132, height: 104, borderRadius: radius.md, backgroundColor: colors.surfaceStrong },
     messageImagePlaceholder: { width: 132, minHeight: 76, borderRadius: radius.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', padding: spacing.sm, gap: spacing.xs },
-    messageImageName: { ...t.caption, color: colors.primary, maxWidth: '100%' },
+    messageImageName: { ...t.caption, color: colors.linkText, maxWidth: '100%' },
     reasoningCard: { alignSelf: 'stretch', borderRadius: radius.md, overflow: 'hidden' },
     reasoningHeader: { minHeight: 48, paddingHorizontal: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
     reasoningHeaderPressed: { backgroundColor: colors.surfaceStrong },
@@ -147,7 +147,7 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     queueDockText: { ...t.small, color: colors.muted, flex: 1 },
     resendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44, paddingHorizontal: spacing.xs },
     resendRowPressed: { opacity: 0.6 },
-    resendText: { ...t.small, color: colors.primary },
+    resendText: { ...t.small, color: colors.linkText },
     canceledText: { ...t.small, color: colors.muted, paddingHorizontal: spacing.xs, minHeight: 44, textAlignVertical: 'center' },
     // maxHeight comes from usePickerListMaxHeight so landscape sheets fit.
     subagentList: { flexShrink: 1 },

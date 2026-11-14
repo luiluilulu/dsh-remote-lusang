@@ -2194,7 +2194,7 @@ const createStyles = (colors: ThemeColors) =>
       marginHorizontal: spacing.xs,
       borderRadius: radius.sm,
     },
-    showMoreText: { ...type.caption, color: colors.primary, fontWeight: '500' },
+    showMoreText: { ...type.caption, color: colors.linkText, fontWeight: '500' },
 
     pressedBg: { backgroundColor: colors.sidebarHover },
     pressedFade: { opacity: 0.72 },

@@ -98,8 +98,8 @@ export function ExpandedComposer({
                 onPress={() => onRemoveQuote?.(index)}
                 style={styles.composerInlineQuoteBadge}
               >
-                <QuoteMarkIcon size={14} color={colors.primary} />
-                <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.primary, maxWidth: 220 }]}>
+                <QuoteMarkIcon size={14} color={colors.linkText} />
+                <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.linkText, maxWidth: 220 }]}>
                   “{formatQuoteDraftSnippet(quoteText, 18)}”
                 </Text>
               </Pressable>

@@ -134,7 +134,7 @@ const FALLBACK_PREVIEW_STATE: BotState = parseBotState({
       name: 'Chief',
       role: 'Chief of Staff',
       main: true,
-      color: '#4D6BFE',
+      color: '#3964FE',
     },
   ],
   rooms: [],

@@ -84,6 +84,8 @@ export interface ThemeColors {
   sidebarSection: string
   /** White pill that opens a new conversation inside the drawer. */
   sidebarActionFill: string
+  /** Brand-colored text and links; lighter than `primary` on dark surfaces. */
+  linkText: string
 }
 
 // DeepSeek palette: ink #0F1115, DeepSeek blue (#3964FE) accents, white cards on the
@@ -132,16 +134,17 @@ export const lightColors: ThemeColors = {
   sidebarActiveText: '#3964FE',
   sidebarSection: '#81858C',
   sidebarActionFill: '#FFFFFF',
+  linkText: '#3964FE',
 }
 
 export const darkColors: ThemeColors = {
   background: '#151517',
   surface: '#2C2C2E',
-  card: 'rgba(255, 255, 255, 0.06)',
-  cardOpaque: '#2C2C2E',
-  surfaceStrong: '#353638',
-  grouped: 'rgba(255, 255, 255, 0.06)',
-  elevated: '#353638',
+  card: '#232325',
+  cardOpaque: '#232325',
+  surfaceStrong: '#43454A',
+  grouped: '#232325',
+  elevated: '#2C2C2E',
   ink: '#F9FAFB',
   muted: '#CFD3D6',
   subtle: '#81858C',
@@ -170,14 +173,15 @@ export const darkColors: ThemeColors = {
   chatBubble: '#2C2C2E',
   composerFill: '#2C2C2E',
   hairline: 'rgba(0, 0, 0, 0.10)',
-  faint: '#81858C',
+  faint: '#ADB2B8',
   sidebarFill: '#1B1B1C',
   sidebarBorder: 'rgba(255, 255, 255, 0.04)',
   sidebarHover: '#2C2C2E',
   sidebarActive: '#353638',
   sidebarActiveText: '#F9FAFB',
-  sidebarSection: '#81858C',
+  sidebarSection: '#ADB2B8',
   sidebarActionFill: '#2C2C2E',
+  linkText: '#679EFE',
 }
 
 export function colorsForScheme(scheme: ColorScheme): ThemeColors {

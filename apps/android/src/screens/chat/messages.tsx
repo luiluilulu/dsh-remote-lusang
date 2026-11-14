@@ -557,8 +557,8 @@ function MessageBubble({ item, compact, artifacts, editedFiles, onFilePress, onS
           <View style={styles.userMessageInlineWrap}>
             {quotes.map((quoteText, index) => (
               <View key={`quote:${index}`} style={styles.composerInlineQuoteBadge}>
-                <QuoteMarkIcon size={14} color={colors.primary} />
-                <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.primary, maxWidth: 200 }]}>
+                <QuoteMarkIcon size={14} color={colors.linkText} />
+                <Text numberOfLines={1} style={[styles.composerInlineQuoteText, { color: colors.linkText, maxWidth: 200 }]}>
                   “{formatQuoteDraftSnippet(quoteText, 16)}”
                 </Text>
               </View>

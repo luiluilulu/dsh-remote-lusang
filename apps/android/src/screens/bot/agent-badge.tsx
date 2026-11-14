@@ -81,7 +81,7 @@ export function isLocalRoute(ref?: string): boolean {
 function resolveInkHex(inkName: string, scheme: 'light' | 'dark'): string {
   const table = assets.inks as Record<string, string[]>
   const entry = table[inkName] ?? table.deepseek
-  return entry?.[scheme === 'dark' ? 1 : 0] ?? '#4D6BFE'
+  return entry?.[scheme === 'dark' ? 1 : 0] ?? '#3964FE'
 }
 
 export function BotAgentBadge({ engine, size = 15 }: { engine?: string; size?: number }) {

@@ -85,7 +85,7 @@ export function QuotePreview({ text, removal, compact = true, style }: QuotePrev
         onPress={() => setExpanded(prev => !prev)}
       >
         <View style={styles.marker} aria-hidden>
-          <QuoteMarkIcon size={14} color={colors.primary} />
+          <QuoteMarkIcon size={14} color={colors.linkText} />
         </View>
         <Text
           numberOfLines={isCompact ? 1 : undefined}
@@ -174,8 +174,8 @@ export function InlineQuotePreview({
   return (
     <View style={[inlineStyles.container, style]}>
       <View style={inlineStyles.quoteRow}>
-        <QuoteMarkIcon size={13} color={colors.primary} />
-        <Text style={[inlineStyles.quoteText, { color: colors.primary }]} numberOfLines={1}>
+        <QuoteMarkIcon size={13} color={colors.linkText} />
+        <Text style={[inlineStyles.quoteText, { color: colors.linkText }]} numberOfLines={1}>
           “{snippet}”
         </Text>
       </View>
@@ -187,7 +187,7 @@ export function InlineQuotePreview({
           onPress={onRemove}
           style={inlineStyles.closeButton}
         >
-          <X size={13} color={colors.primary} />
+          <X size={13} color={colors.linkText} />
         </Pressable>
       )}
     </View>

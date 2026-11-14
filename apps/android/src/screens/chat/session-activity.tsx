@@ -267,7 +267,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   compactPillText: { ...typography.caption, color: colors.ink, flexShrink: 1 },
   compactPillCount: { ...typography.caption, color: colors.muted, fontVariant: ['tabular-nums'] },
   compactPillDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.danger },
-  expandedSection: { borderRadius: radius.xl, backgroundColor: colors.card, overflow: 'hidden', paddingTop: spacing.xs },
+  expandedSection: { borderRadius: radius.xl, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline, overflow: 'hidden', paddingTop: spacing.xs },
   details: { maxHeight: 160, paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
   jobs: { maxHeight: 220 },
   todo: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.xs, alignItems: 'flex-start' },
@@ -284,5 +284,5 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   empty: { ...typography.small, color: colors.muted, padding: spacing.sm },
   jobActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   retry: { minHeight: 44, paddingHorizontal: spacing.sm, justifyContent: 'center' },
-  retryText: { ...typography.small, color: colors.primary },
+  retryText: { ...typography.small, color: colors.linkText },
 })

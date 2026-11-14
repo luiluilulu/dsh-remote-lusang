@@ -26,7 +26,7 @@
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#111C32",
+        "backgroundColor": "#151517",
         "foregroundImage": "./assets/android-icon-foreground-adaptive.png"
       },
       "predictiveBackGestureEnabled": false
@@ -40,7 +40,7 @@
           "image": "./assets/splash-brand.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#F8F8F8"
+          "backgroundColor": "#FFFFFF"
         }
       ],
       [

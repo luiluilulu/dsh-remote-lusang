@@ -7,7 +7,7 @@ import { useTheme, type ThemeColors } from '../ui/theme-context'
 import { useThemedStyles } from '../ui/use-themed-styles'
 
 // DeepSeek brand blue, matching the splash mark.
-const BRAND = '#4D6BFE'
+const BRAND = '#3964FE'
 
 const TILE = 104
 const LAPTOP_WIDTH = 72

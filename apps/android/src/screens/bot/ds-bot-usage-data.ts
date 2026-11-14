@@ -66,7 +66,7 @@ export interface ActivityYearSummary {
 }
 
 const CHART_COLORS = [
-  '#4D6BFE',
+  '#3964FE',
   '#10B981',
   '#F59E0B',
   '#8B5CF6',
