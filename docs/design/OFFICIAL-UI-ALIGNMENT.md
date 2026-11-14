@@ -15,8 +15,10 @@
 
 ## 剩余差距（按优先级）
 
-1. **次级页面仍是旧视觉**：`plugins-modal`（插件页）、`automation-tasks-modal`、`bot-mode-screen`、
-   主机切换/设备列表局部、`session-info`。目标：改用官方分组列表/f lat 卡片与 plain 顶栏。
+1. **次级页面仍是旧视觉**：`plugins-modal`（插件页）、`automation-tasks-modal`、
+   主机切换/设备列表局部、`session-info`。目标：改用官方分组列表/flat 卡片与 plain 顶栏。
+   Bot 模式（`bot-mode-screen` + `bot/styles.ts`）已于 2026-11-14 对齐：plain 顶栏（无浮动胶囊/内联消息）、
+   官方侧栏行（52dp 扁平、sidebarHover 按压、14/20 标题）、官方输入卡片（24dp/composerFill/hairline）、16/24 输入字号。
 2. **选择器与弹层**：模型/权限/工具/工作区 picker、`reference-chat-modal`、图片查看器仍为旧样式，
    官方为底部圆角 sheet + 34–40dp 行 + 细分隔线。
 3. **输入区细节**：快捷提示词面板、`@` 提及弹层、附件 tray、全屏输入框尚未对齐官方；
