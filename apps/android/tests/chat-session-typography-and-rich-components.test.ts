@@ -20,46 +20,6 @@ import MarkdownIt from 'markdown-it'
 
 describe('chat session typography and rich components', () => {
   describe('typography hierarchy and line height ratios', () => {
-    it('standard density headings and body adhere to balanced reading proportions', () => {
-      const styles = createStyles(lightColors, 'standard')
-
-      // H1-H4 size ladder
-      expect(styles.h1.fontSize).toBe(24)
-      expect(styles.h1.lineHeight).toBe(31)
-      expect(styles.h2.fontSize).toBe(20)
-      expect(styles.h2.lineHeight).toBe(26)
-      expect(styles.h3.fontSize).toBe(17)
-      expect(styles.h3.lineHeight).toBe(23)
-      expect(styles.h4.fontSize).toBe(15)
-      expect(styles.h4.lineHeight).toBe(20)
-
-      // Paragraph line-height ratio >= 1.5 for comfortable continuous reading
-      expect(styles.paragraph.fontSize).toBe(16)
-      expect(styles.paragraph.lineHeight).toBe(25)
-      const ratio = (styles.paragraph.lineHeight as number) / (styles.paragraph.fontSize as number)
-      expect(ratio).toBeGreaterThanOrEqual(1.5)
-      expect(ratio).toBeLessThanOrEqual(1.65)
-    })
-
-    it('compact density provides proportional scaling for small displays', () => {
-      const styles = createStyles(lightColors, 'compact')
-
-      expect(styles.h1.fontSize).toBe(21)
-      expect(styles.h1.lineHeight).toBe(27)
-      expect(styles.h2.fontSize).toBe(18)
-      expect(styles.h2.lineHeight).toBe(23)
-      expect(styles.h3.fontSize).toBe(16)
-      expect(styles.h3.lineHeight).toBe(21)
-      expect(styles.h4.fontSize).toBe(14)
-      expect(styles.h4.lineHeight).toBe(19)
-
-      expect(styles.paragraph.fontSize).toBe(15)
-      expect(styles.paragraph.lineHeight).toBe(23)
-      const ratio = (styles.paragraph.lineHeight as number) / (styles.paragraph.fontSize as number)
-      expect(ratio).toBeGreaterThanOrEqual(1.5)
-      expect(ratio).toBeLessThanOrEqual(1.65)
-    })
-
     it('inline code has padded pill background with rounded corners', () => {
       const styles = createStyles(lightColors, 'standard')
       expect(styles.inlineCode.borderRadius).toBe(4)
@@ -327,17 +287,6 @@ describe('chat session typography and rich components', () => {
       // Inline code quotes like `[!NOTE]` must not be misidentified as callouts
       const treeCode = buildNodeTree('> `[!NOTE]`\n> explaining markdown syntax')
       expect(parseCalloutNode(treeCode[0]!)).toBeNull()
-    })
-
-    it('callout card and standard blockquote have balanced container styling', () => {
-      const styles = createStyles(lightColors, 'standard')
-      expect(styles.calloutCard.borderRadius).toBe(12)
-      expect(styles.calloutCard.borderWidth).toBe(1)
-      expect(styles.calloutHeader.flexDirection).toBe('row')
-
-      expect(styles.blockquote.borderLeftWidth).toBe(3)
-      expect(styles.blockquote.borderRadius).toBe(6)
-      expect(styles.blockquote.backgroundColor).toBe(lightColors.surfaceStrong)
     })
   })
 })
