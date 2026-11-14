@@ -325,6 +325,8 @@ export function createStyles(colors: ThemeColors, density: TypographyDensity = '
     voiceDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
     voiceTimer: { ...t.smallStrong, fontVariant: ['tabular-nums'], color: colors.ink, minWidth: 44 },
     voiceHint: { ...t.small, color: colors.muted, flexShrink: 1 },
+    linkSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingTop: 12 },
+    linkSummaryText: { ...t.smallStrong, fontSize: 13, flexShrink: 1 },
     // Keep the actual target at the Android 44dp minimum; the official icon buttons
     // render as bare 34px glyphs inside the function row.
     plusButton: {

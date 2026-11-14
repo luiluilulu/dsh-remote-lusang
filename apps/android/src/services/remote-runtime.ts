@@ -79,6 +79,9 @@ export class AndroidRemoteRuntime {
   recognizeImage(imageBase64: string, language?: string, signal?: AbortSignal) {
     return this.client.recognizeImage(imageBase64, language, signal)
   }
+  fetchLink(url: string, signal?: AbortSignal) {
+    return this.client.fetchLink(url, signal)
+  }
   hasCodex() { return this.client.hasCodex() }
   requireCursor() { return this.client.requireCursor() }
   hasCursor() { return this.client.hasCursor() }

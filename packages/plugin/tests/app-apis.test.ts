@@ -35,4 +35,23 @@ describe('app api wire validation', () => {
       code: 'APP_API_UNAVAILABLE',
     })
   })
+
+  it('blocks private destinations, non-http schemes and oversized input before fetching', async () => {
+    const blocked = [
+      'http://127.0.0.1/',
+      'http://10.1.2.3/',
+      'http://172.20.0.1/',
+      'http://192.168.1.1/',
+      'http://169.254.169.254/latest/meta-data',
+      'http://[::1]/',
+      'http://[fd00::1]/',
+      'file:///C:/Windows/win.ini',
+      'http://user:pass@example.com/',
+    ]
+    for (const url of blocked) {
+      await expect(host.fetchLink({ url }), url).rejects.toMatchObject({ code: 'APP_API_BLOCKED' })
+    }
+    await expect(host.fetchLink({ url: 'not a url' })).rejects.toMatchObject({ code: 'INVALID_MESSAGE' })
+    await expect(host.fetchLink({ url: `https://example.com/${'a'.repeat(2_100)}` })).rejects.toMatchObject({ name: 'ZodError' })
+  })
 })

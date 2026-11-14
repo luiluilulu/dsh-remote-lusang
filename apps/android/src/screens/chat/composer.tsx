@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleStop, Mic, Plus, X, Zap } from 'lucide-react-native'
+import { ArrowUp, Check, ChevronDown, CircleStop, Link2, Mic, Plus, X, Zap } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
@@ -48,6 +48,12 @@ function formatElapsed(ms: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
+/** A draft that is exactly one link can be summarized on the computer. */
+function singleLink(text: string): string | undefined {
+  const trimmed = text.trim()
+  return /^https?:\/\/\S+$/.test(trimmed) ? trimmed : undefined
+}
+
 type Props = {
   backend: RemoteSession['backend']
   draft: string
@@ -72,17 +78,20 @@ type Props = {
   onOpenExpand?: () => void
   onOpenActions: () => void
   onOpenPrompts: () => void
+  /** When the draft is one link, fetch it on the Host and quote the page text. */
+  onSummarizeLink?: (url: string) => void
   onSubmit: () => void
   onStop: () => void
 }
 
 export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, replyActive, stopping, compactRunning,
   hasComposerContent, connected, editable, composerDisabled, sendDisabled, compactComposer,
-  composerInputMaxHeight, model, voice, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSubmit, onStop }: Props) {
+  composerInputMaxHeight, model, voice, promptsPickerOpen, onExpand, onOpenExpand, onOpenActions, onOpenPrompts, onSummarizeLink, onSubmit, onStop }: Props) {
   const { colors } = useTheme()
   const styles = useThemedStyles(createStyles)
   const { composerInputRef, mentionType, mentionGroups, selection, closeMention, onChangeText, onSelectionChange } = input
   const draftSegments = useMemo(() => splitDraftSegments(draft), [draft])
+  const linkUrl = useMemo(() => singleLink(draft), [draft])
   const backendTextKeys = BACKEND_CHAT_TEXT_KEYS[backend ?? 'harness'] ?? BACKEND_CHAT_TEXT_KEYS.harness
   const replyStatusLabel = stopping ? strings.chat.stopping : strings.chat[backendTextKeys.generating]
   return <>
@@ -159,6 +168,20 @@ export function ChatComposer({ backend, draft, quotes, onRemoveQuote, input, rep
             style={({ pressed }) => [styles.composerExpandButton, pressed && styles.plusPressed]}
           >
             <ExpandCornerIcon size={17} color={colors.muted} />
+          </Pressable>
+        )}
+        {onSummarizeLink !== undefined && linkUrl !== undefined && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.chat.linkSummary}
+            onPress={() => onSummarizeLink(linkUrl)}
+            hitSlop={6}
+            style={({ pressed }) => [styles.linkSummaryRow, pressed && styles.plusPressed]}
+          >
+            <Link2 size={14} color={colors.linkText} />
+            <Text numberOfLines={1} style={[styles.linkSummaryText, { color: colors.linkText }]}>
+              {strings.chat.linkSummary}
+            </Text>
           </Pressable>
         )}
         <View style={styles.composerInputWrap}>

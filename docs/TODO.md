@@ -410,7 +410,7 @@ Implement Dart mobile proof vectors, scanner/credential integration and Android 
   `app-api.v1` 能力宣告；RPC 端点与 Zod 校验已接线，真实 Windows 端到端（合成 528ms / 识别 544ms）已验证。
 - [x] MVP-1 Android 朗读：原生 `RemoteAudioPlayerModule` + 助手消息「朗读/停止朗读」按钮（`app-api.v1` 能力门禁）。
 - [x] MVP-1 Android 取字：全屏图片预览新增「取字」（`ScanText`），`appApi.ocr` 结果回填草稿；本地 file/content/data URI 支持，远程 http 图片暂不支持。
-- [ ] MVP-2：Host `appApi/fetch`（Node fetch + 正文提取 + SSRF 防护）；Android 链接总结入口。
+- [x] MVP-2：`appApi.fetch`（Node fetch + 正文提取 + SSRF 防护：环回/私有/保留地址、逐跳重定向校验、1 MiB / 20k 字上限）；输入框单链接显示「总结链接」，页面文本作为引用插入。真实抓取 example.com 验证通过（577 B / 215 ms）。
 - [ ] MVP-3：Host `appApi/search`（需用户自备搜索 key，仅存电脑端）；Android 搜索结果入口。
 - [ ] 官方后续若提供 TTS/OCR/Search/Fetch Remote 命名空间，优先切换并删除自建实现。
 

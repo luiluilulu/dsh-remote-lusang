@@ -596,6 +596,7 @@ const zhCN = {
     hermesDirectoryHint: '使用所选目录进行 Hermes 对话，已有对话从电脑端加载。', renameTitle: '重命名工作区', namePlaceholder: '输入工作区名称', saveName: '保存', chooseFolder: '选择项目目录', loading: '正在加载…', loadingDirectory: '正在读取目录…', noFolders: '这里没有可选的文件夹', showHidden: '显示隐藏文件夹', hideHidden: '隐藏隐藏文件夹', chooseThisFolder: '使用此目录',
   },
   chat: {
+    linkSummary: '总结链接',
     ocrExtract: '取字',
     ocrEmpty: '未识别到文字',
     ocrUnavailable: '电脑端未提供取字能力',

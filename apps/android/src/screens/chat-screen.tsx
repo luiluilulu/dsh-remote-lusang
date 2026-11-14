@@ -28,7 +28,7 @@ import type { CustomPrompt } from '../services/storage'
 import { BUILT_IN_PROMPTS } from '../services/storage'
 import type { ChatSection } from '../state/message-helpers'
 import { isKnownBotSessionId, useBotTeamStore } from '../state/bot-store'
-import { chatImageConnectionGeneration, requireConnectionRpc, requireSessionTools, sessionChatImageLoader, useAppStore } from '../state/store'
+import { chatImageConnectionGeneration, fetchLink, requireConnectionRpc, requireSessionTools, sessionChatImageLoader, supportsAppApis, useAppStore } from '../state/store'
 import { type UiArtifact } from '../state/ui-artifacts'
 import type {
   ChatItem,
@@ -261,6 +261,23 @@ export function ChatScreen({
         )
       })
       .finally(() => setOcrBusy(false))
+  }
+
+  // Link summary: the Host fetches the page (SSRF-guarded) and its readable text
+  // becomes a quote, so the model can summarize it in the next message.
+  const summarizeLink = (url: string) => {
+    void fetchLink(url)
+      .then(page => {
+        const title = page.title !== '' ? page.title : url
+        const excerpt = page.text.slice(0, 12_000)
+        setQuotes(current => [...current, `${title}\n${page.url}\n\n${excerpt}`])
+      })
+      .catch(error => {
+        Alert.alert(
+          strings.chat.linkSummary,
+          error instanceof Error && error.message !== '' ? error.message : strings.messageActions.unavailable,
+        )
+      })
   }
   const lastQuoteCountRef = useRef(quotes.length)
   useEffect(() => {
@@ -1422,6 +1439,7 @@ export function ChatScreen({
           promptsPickerOpen={promptsPickerOpen} onExpand={() => setComposingDuringRun(true)}
           onOpenExpand={() => setComposerExpanded(true)}
           onOpenActions={openPlusMenu} onOpenPrompts={openPromptsPicker}
+          onSummarizeLink={supportsAppApis() ? summarizeLink : undefined}
           onSubmit={() => void submit()} onStop={() => void stopSession()}
         />
         </View>

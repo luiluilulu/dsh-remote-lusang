@@ -598,6 +598,7 @@ const enUS = {
     hermesDirectoryHint: 'Use this directory for Hermes conversations. Existing conversations are loaded from the computer.', renameTitle: 'Rename workspace', namePlaceholder: 'Enter a workspace name', saveName: 'Save', chooseFolder: 'Choose project directory', loading: 'Loading…', loadingDirectory: 'Reading directory…', noFolders: 'No folders are available here', showHidden: 'Show hidden folders', hideHidden: 'Hide hidden folders', chooseThisFolder: 'Use this directory',
   },
   chat: {
+    linkSummary: 'Summarize link',
     ocrExtract: 'Extract text',
     ocrEmpty: 'No text recognized',
     ocrUnavailable: 'Text recognition is unavailable on this computer',

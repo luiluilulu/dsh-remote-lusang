@@ -372,6 +372,25 @@ export class AndroidRemoteConnection {
     }
   }
 
+  /**
+   * Fetch a public page on the computer and return its readable text. The Host
+   * blocks private/loopback destinations and caps the body size.
+   */
+  async fetchLink(url: string, signal?: AbortSignal): Promise<{ url: string; title: string; text: string; bytes: number }> {
+    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
+    if (!this.appApiSupported) throw new Error(strings.messageActions.unavailable)
+    const value = await this.core.rpc<unknown>('appApi.fetch', { url }, signal)
+    const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+    const text = typeof record.text === 'string' ? record.text : ''
+    if (text === '') throw new Error(strings.messageActions.unavailable)
+    return {
+      url: typeof record.url === 'string' ? record.url : url,
+      title: typeof record.title === 'string' ? record.title : '',
+      text,
+      bytes: typeof record.bytes === 'number' ? record.bytes : 0,
+    }
+  }
+
   /** Optional CodeX business client; available only when the Host advertises both domain capabilities. */
   requireCodex(): CodexRemoteClient {
     if (this.codex === undefined || !this.codexAvailable) throw new Error(strings.runtime.codexUnavailable)

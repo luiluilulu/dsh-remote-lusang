@@ -35,6 +35,7 @@ export const synthesizeSpeech = (text: string, options: { voice?: string; rate?:
   runtime.connection.synthesizeSpeech(text, options, signal)
 export const recognizeImage = (imageBase64: string, language?: string, signal?: AbortSignal) =>
   runtime.connection.recognizeImage(imageBase64, language, signal)
+export const fetchLink = (url: string, signal?: AbortSignal) => runtime.connection.fetchLink(url, signal)
 export const getConnectionGeneration = () => runtime.connectionGeneration
 
 export const stopConnectionRecovery = () => runtime.connection.stopRecovery().catch(() => undefined)
