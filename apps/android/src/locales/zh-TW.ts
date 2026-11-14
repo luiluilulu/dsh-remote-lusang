@@ -635,6 +635,8 @@ const zhTW = {
     hermesUnavailable: '這臺裝置沒有啟用 Hermes Remote，或 Hermes ACP 當前不可用。', cursorTextOnly: 'Cursor Remote 當前僅支援文字訊息，暫不支援圖片。', piTextOnly: 'Pi Remote 當前僅支援文字訊息，暫不支援圖片。', hostMissingKey: '這臺裝置沒有可用的安全金鑰，請先重新確認並信任它。', unexpectedRelayDevice: '安全連線對應的裝置與所選裝置不一致。', secureChannelNotConnected: '安全連線尚未建立。', secureHandshakeTimedOut: '建立安全連線超時，請重試。', secureHandshakeOrder: '安全連線握手順序無效。', secureHandshakeIncomplete: '安全連線握手未完成。', secureHandshakeFailed: '無法完成安全連線握手。',
   },
   messageActions: {
+    readAloud: '朗讀',
+    readAloudStop: '停止朗讀',
     quote: '引用', quoted: '已引用', copy: '複製回答', copied: '已複製', good: '好的回答', bad: '有問題的回答', branch: '在新對話中分支',
     askAgent: '詢問智慧體', selectAll: '全選',
     unavailable: '當前主機或訊息不支援此操作', failed: '操作未完成', feedbackSaved: '反饋已儲存到主機',

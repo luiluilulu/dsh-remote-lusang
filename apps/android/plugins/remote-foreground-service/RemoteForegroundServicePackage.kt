@@ -11,6 +11,7 @@ class RemoteForegroundServicePackage : ReactPackage {
     RemoteDownloadsModule(reactContext),
     RemoteProcessTextModule(reactContext),
     RemoteAudioRecorderModule(reactContext),
+    RemoteAudioPlayerModule(reactContext),
   )
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()

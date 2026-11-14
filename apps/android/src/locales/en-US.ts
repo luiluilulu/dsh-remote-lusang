@@ -637,6 +637,8 @@ const enUS = {
     hermesUnavailable: 'Hermes Remote is not enabled on this device, or Hermes ACP is currently unavailable.', cursorTextOnly: 'Cursor Remote currently supports text messages only, not images.', piTextOnly: 'Pi Remote currently supports text messages only, not images.', hostMissingKey: 'This device has no security key. Verify and trust it again.', unexpectedRelayDevice: 'The secure connection does not match the selected device.', secureChannelNotConnected: 'The secure connection has not been established.', secureHandshakeTimedOut: 'The secure connection timed out. Try again.', secureHandshakeOrder: 'The secure connection handshake was out of order.', secureHandshakeIncomplete: 'The secure connection handshake did not complete.', secureHandshakeFailed: 'The secure connection handshake failed.',
   },
   messageActions: {
+    readAloud: 'Read aloud',
+    readAloudStop: 'Stop reading',
     quote: 'Quote', quoted: 'Quoted', copy: 'Copy answer', copied: 'Copied', good: 'Good response', bad: 'Bad response', branch: 'Branch in a new chat',
     askAgent: 'Ask Agent', selectAll: 'Select All',
     unavailable: 'Operation unavailable on this host or message', failed: 'Action failed', feedbackSaved: 'Feedback saved to host',

@@ -28,6 +28,8 @@ export class AndroidRemoteConnection {
   private compactHistorySupported = false
   private pluginRouteSupported = false
   private speechSupported = false
+  /** Host-side Windows app APIs (TTS/OCR) announced as `app-api.v1`. */
+  private appApiSupported = false
   private core?: RemoteClientCore
   private proxy?: RemoteHarnessClient
   private codex?: CodexRemoteClient
@@ -147,6 +149,7 @@ export class AndroidRemoteConnection {
         this.acpBackends.clear()
         this.sessionTools = undefined
         this.speechSupported = false
+        this.appApiSupported = false
         options.onClose?.({ retryable: retryableClose, ...(lastTransport !== undefined ? { lastTransport } : {}) })
       })
       await core.connect()
@@ -218,6 +221,7 @@ export class AndroidRemoteConnection {
     // Official experimental speech Remote namespace; the Host advertises it only
     // when its composition provides the speechController service.
     this.speechSupported = features.capabilities.includes('speech.remote.v1')
+    this.appApiSupported = features.capabilities.includes('app-api.v1')
     this.codexAvailable = features.capabilities.includes('codex.appserver.transfer.v1')
       && remoteWorkspaceTypeAvailable(features.capabilities, features.workspaceTypes, 'codex', 'codex.appserver.v1')
     if (this.codexAvailable) this.codex ??= new CodexRemoteClient(core, true)
@@ -318,6 +322,54 @@ export class AndroidRemoteConnection {
       : undefined
     if (typeof text !== 'string' || text.trim() === '') throw new Error(strings.chat.voiceEmpty)
     return text.trim()
+  }
+
+  /** The connected Host announces the Windows-local TTS/OCR app APIs. */
+  supportsAppApis(): boolean {
+    return this.core !== undefined && this.appApiSupported
+  }
+
+  /**
+   * Synthesize one assistant message on the computer (Windows SAPI) and return
+   * a WAV for local playback. The phone never needs a cloud key for this.
+   */
+  async synthesizeSpeech(
+    text: string,
+    options: { voice?: string; rate?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<{ audioBase64: string; durationMs: number; bytes: number }> {
+    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
+    if (!this.appApiSupported) throw new Error(strings.messageActions.unavailable)
+    const params: Record<string, unknown> = { text }
+    if (options.voice !== undefined && options.voice !== '') params.voice = options.voice
+    if (options.rate !== undefined) params.rate = options.rate
+    const value = await this.core.rpc<unknown>('appApi.tts', params, signal)
+    const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+    const audioBase64 = record.audioBase64
+    if (typeof audioBase64 !== 'string' || audioBase64 === '') throw new Error(strings.messageActions.unavailable)
+    return {
+      audioBase64,
+      durationMs: typeof record.durationMs === 'number' ? record.durationMs : 0,
+      bytes: typeof record.bytes === 'number' ? record.bytes : 0,
+    }
+  }
+
+  /** Recognize text on the computer (Windows.Media.Ocr) and return the lines. */
+  async recognizeImage(
+    imageBase64: string,
+    language?: string,
+    signal?: AbortSignal,
+  ): Promise<{ text: string; lines: string[] }> {
+    if (this.core === undefined) throw new Error(strings.runtime.connectHostFirst)
+    if (!this.appApiSupported) throw new Error(strings.messageActions.unavailable)
+    const params: Record<string, unknown> = { imageBase64 }
+    if (language !== undefined && language !== '') params.language = language
+    const value = await this.core.rpc<unknown>('appApi.ocr', params, signal)
+    const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+    return {
+      text: typeof record.text === 'string' ? record.text : '',
+      lines: Array.isArray(record.lines) ? record.lines.filter((line): line is string => typeof line === 'string') : [],
+    }
   }
 
   /** Optional CodeX business client; available only when the Host advertises both domain capabilities. */

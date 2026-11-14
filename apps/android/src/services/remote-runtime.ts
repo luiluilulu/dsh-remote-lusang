@@ -72,6 +72,13 @@ export class AndroidRemoteRuntime {
   transcribeVoice(audioBase64: string, language: string | undefined, signal?: AbortSignal) {
     return this.client.transcribeVoice(audioBase64, language, signal)
   }
+  supportsAppApis() { return this.client.supportsAppApis() }
+  synthesizeSpeech(text: string, options: { voice?: string; rate?: number } = {}, signal?: AbortSignal) {
+    return this.client.synthesizeSpeech(text, options, signal)
+  }
+  recognizeImage(imageBase64: string, language?: string, signal?: AbortSignal) {
+    return this.client.recognizeImage(imageBase64, language, signal)
+  }
   hasCodex() { return this.client.hasCodex() }
   requireCursor() { return this.client.requireCursor() }
   hasCursor() { return this.client.hasCursor() }

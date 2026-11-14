@@ -29,6 +29,12 @@ export const requireConnectionRpc = () => (method: string, params: unknown, sign
 export const supportsVoiceInput = () => runtime.connection.supportsVoiceInput()
 export const transcribeVoice = (audioBase64: string, language: string | undefined, signal?: AbortSignal) =>
   runtime.connection.transcribeVoice(audioBase64, language, signal)
+/** Host-side Windows app APIs (TTS/OCR); the phone holds no cloud key. */
+export const supportsAppApis = () => runtime.connection.supportsAppApis()
+export const synthesizeSpeech = (text: string, options: { voice?: string; rate?: number } = {}, signal?: AbortSignal) =>
+  runtime.connection.synthesizeSpeech(text, options, signal)
+export const recognizeImage = (imageBase64: string, language?: string, signal?: AbortSignal) =>
+  runtime.connection.recognizeImage(imageBase64, language, signal)
 export const getConnectionGeneration = () => runtime.connectionGeneration
 
 export const stopConnectionRecovery = () => runtime.connection.stopRecovery().catch(() => undefined)

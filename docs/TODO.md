@@ -408,7 +408,8 @@ Implement Dart mobile proof vectors, scanner/credential integration and Android 
   Android 原生 16 kHz mono PCM16 WAV 录音、麦克风按钮与录音条、`speech/transcribe` 回填草稿（提交 `80ca1a8b`）。
 - [x] MVP-1 Host 侧：`appApi.tts`（Windows SAPI，离线）、`appApi.ocr`（Windows.Media.Ocr，离线）、`appApi.voices`；
   `app-api.v1` 能力宣告；RPC 端点与 Zod 校验已接线，真实 Windows 端到端（合成 528ms / 识别 544ms）已验证。
-- [ ] MVP-1 Android 侧：朗读入口 + 原生播放模块、图片「取字」回填草稿。
+- [x] MVP-1 Android 朗读：原生 `RemoteAudioPlayerModule` + 助手消息「朗读/停止朗读」按钮（`app-api.v1` 能力门禁）。
+- [ ] MVP-1 Android 取字：图片预览/相册「取字」入口，结果回填草稿。
 - [ ] MVP-2：Host `appApi/fetch`（Node fetch + 正文提取 + SSRF 防护）；Android 链接总结入口。
 - [ ] MVP-3：Host `appApi/search`（需用户自备搜索 key，仅存电脑端）；Android 搜索结果入口。
 - [ ] 官方后续若提供 TTS/OCR/Search/Fetch Remote 命名空间，优先切换并删除自建实现。

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Alert, Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
+import { Square, Volume2 } from 'lucide-react-native'
 import type { ChatItemBase, ChatMessage, RemoteSession } from '../types'
 import { useAppStore } from '../state/store'
 import { strings } from '../locales/i18n'
+import { speakText, speechPlaybackAvailable, stopSpeaking } from '../services/speech'
 import { useTheme } from '../ui/theme-context'
 import { formatTokens } from '../ui/quote-helpers'
 import {
@@ -164,12 +166,21 @@ export function MessageActions({ item }: { item: ChatMessage }) {
   const fork = useAppStore(state => state.forkChatMessage)
   const [copied, setCopied] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const copyOpacity = useRef(new Animated.Value(1)).current
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current)
+      void stopSpeaking()
     }
   }, [])
 
@@ -197,6 +208,43 @@ export function MessageActions({ item }: { item: ChatMessage }) {
         }, 1800)
       })
       .catch(report)
+  }
+
+  /**
+   * Read-aloud: the computer synthesizes the WAV (Windows SAPI) and the phone
+   * only plays it. Stopping is local, so the button never needs the network.
+   */
+  const clearSpeakTimeout = () => {
+    if (speakTimeoutRef.current) {
+      clearTimeout(speakTimeoutRef.current)
+      speakTimeoutRef.current = null
+    }
+  }
+
+  const toggleReadAloud = () => {
+    if (speaking) {
+      clearSpeakTimeout()
+      void stopSpeaking()
+      setSpeaking(false)
+      return
+    }
+    if (item.text.trim() === '') return
+    setSpeaking(true)
+    void speakText(item.text)
+      .then(durationMs => {
+        clearSpeakTimeout()
+        speakTimeoutRef.current = setTimeout(() => {
+          setSpeaking(false)
+          speakTimeoutRef.current = null
+        }, Math.max(800, durationMs) + 400)
+      })
+      .catch(error => {
+        setSpeaking(false)
+        Alert.alert(
+          strings.messageActions.readAloud,
+          error instanceof Error && error.message !== '' ? error.message : strings.messageActions.unavailable,
+        )
+      })
   }
 
   const branch = () => {
@@ -277,6 +325,20 @@ export function MessageActions({ item }: { item: ChatMessage }) {
           </Pressable>
         </Animated.View>
         {branchAction}
+        {!pending && item.text.trim().length > 0 && speechPlaybackAvailable() && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={speaking ? strings.messageActions.readAloudStop : strings.messageActions.readAloud}
+            accessibilityState={{ selected: speaking }}
+            hitSlop={8}
+            style={styles.actionBtn}
+            onPress={toggleReadAloud}
+          >
+            {speaking
+              ? <Square size={14} color={colors.primary} fill={colors.primary} />
+              : <Volume2 size={16} color={colors.muted} />}
+          </Pressable>
+        )}
         {!pending && isDeepSeekHarness && item.usage !== undefined && (
           <Pressable
             accessibilityRole="button"

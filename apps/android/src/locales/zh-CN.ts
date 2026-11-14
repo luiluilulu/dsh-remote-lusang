@@ -635,6 +635,8 @@ const zhCN = {
     hermesUnavailable: '这台设备没有启用 Hermes Remote，或 Hermes ACP 当前不可用。', cursorTextOnly: 'Cursor Remote 当前仅支持文本消息，暂不支持图片。', piTextOnly: 'Pi Remote 当前仅支持文本消息，暂不支持图片。', hostMissingKey: '这台设备没有可用的安全密钥，请先重新确认并信任它。', unexpectedRelayDevice: '安全连接对应的设备与所选设备不一致。', secureChannelNotConnected: '安全连接尚未建立。', secureHandshakeTimedOut: '建立安全连接超时，请重试。', secureHandshakeOrder: '安全连接握手顺序无效。', secureHandshakeIncomplete: '安全连接握手未完成。', secureHandshakeFailed: '无法完成安全连接握手。',
   },
   messageActions: {
+    readAloud: '朗读',
+    readAloudStop: '停止朗读',
     quote: '引用', quoted: '已引用', copy: '复制回答', copied: '已复制', good: '好的回答', bad: '有问题的回答', branch: '在新对话中分支',
     askAgent: '询问智能体', selectAll: '全选',
     unavailable: '当前主机或消息不支持此操作', failed: '操作未完成', feedbackSaved: '反馈已保存到主机',
