@@ -35,6 +35,7 @@ import {
   Users,
   X,
 } from 'lucide-react-native'
+import { isVisibleSession } from '../lib/session-visibility'
 import { strings as s } from '../locales/i18n'
 import { browseScope } from '../services/browse-memory'
 import {
@@ -573,8 +574,9 @@ export function BotSidebarSection({
         {state !== undefined && showAgents && agents.map(agent =>
           agent.sessions
             .filter(sid => {
-              if (!query) return true
               const matched = sessionMap.get(sid)
+              if (matched && !isVisibleSession(matched, selectedId, query)) return false
+              if (!query) return true
               const title = (matched ? resolveSessionDisplayTitle(matched) : undefined) ?? s.sessions.untitled
               return title.toLocaleLowerCase().includes(query)
             })

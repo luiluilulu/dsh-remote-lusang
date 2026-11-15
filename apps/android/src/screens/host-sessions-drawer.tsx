@@ -58,6 +58,7 @@ import { useTheme, type ThemeColors } from '../ui/theme-context'
 import { useThemedStyles } from '../ui/use-themed-styles'
 import { resolveSessionDisplayTitle } from './session-title'
 import { OfficialMenuIcons } from '../ui/official-menu-icons'
+import { isVisibleSession } from '../lib/session-visibility'
 import { browseStatus } from '../lib/backend-groups'
 import { browseScope, saveHostMode, useBrowseMemory } from '../services/browse-memory'
 import {
@@ -688,7 +689,9 @@ export function HostSessionsDrawer({
   const filteredSessions = useMemo(() => {
     const known = selected && !sessions.some(session => session.sessionId === selected.sessionId)
       ? [selected, ...sessions] : sessions
-    let list = known.filter(session => (session.backend ?? 'harness') === backend && !isKnownBotSessionId(session.sessionId, botTeamState, hostScope))
+    let list = known.filter(session => (session.backend ?? 'harness') === backend
+      && !isKnownBotSessionId(session.sessionId, botTeamState, hostScope)
+      && isVisibleSession(session, selected?.sessionId, searchQuery))
     if (filterMode === 'hideArchived') {
       list = list.filter(s => !archivedIds.includes(s.sessionId))
     } else if (filterMode === 'archivedOnly') {
