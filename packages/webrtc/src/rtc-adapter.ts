@@ -72,6 +72,8 @@ export interface RtcPeerConnection {
   iceConnectionState: string
   iceGatheringState: string
   signalingState: string
+  /** Optional: native backends expose the negotiated local description. */
+  readonly localDescription?: RtcSessionDescriptionInit | null
   onconnectionstatechange: (() => void) | null
   oniceconnectionstatechange: (() => void) | null
   onicegatheringstatechange: (() => void) | null
@@ -254,4 +256,24 @@ function adaptDataChannel(raw: RTCDataChannel): RtcDataChannel {
     send(data) { raw.send(data as never) },
     close() { raw.close() },
   }
+}
+
+/**
+ * Recognize a Tailscale interface so its CGNAT/ULA addresses can be allowed as
+ * ICE candidates while other virtual interfaces stay filtered.
+ */
+export function isTailscaleInterface(
+  name: string,
+  addresses: readonly { address: string; internal: boolean }[],
+): boolean {
+  if (/^tailscale\d*$/i.test(name)) return true
+  // macOS Network Extensions use a generic utun name. Identify the interface
+  // by its Tailscale IPv6 address before offering its CGNAT IPv4 address.
+  return /^utun\d+$/i.test(name)
+    && addresses.some(({ address, internal }) => !internal && isTailscaleIpv6(address))
+}
+
+/** Tailscale assigns overlay addresses from fd7a:115c:a1e0::/48. */
+export function isTailscaleIpv6(address: string): boolean {
+  return address.toLowerCase().startsWith('fd7a:115c:a1e0:')
 }

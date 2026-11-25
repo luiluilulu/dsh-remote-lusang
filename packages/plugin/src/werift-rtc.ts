@@ -20,7 +20,7 @@ import type {
   RtcSessionDescriptionInit,
   RtcStats,
 } from '@dsh-remote/webrtc'
-import { summarizeAddress, summarizeIceCandidate } from '@dsh-remote/webrtc'
+import { isTailscaleInterface, summarizeAddress, summarizeIceCandidate } from '@dsh-remote/webrtc'
 import { normalizeSdpMLineIndex } from '@dsh-remote/protocol'
 import { loadExternalNativeRtcFactory } from './native-rtc-helper.js'
 
@@ -97,6 +97,7 @@ interface NativePeerConnection {
   iceConnectionState: string
   iceGatheringState: string
   signalingState: string
+  readonly localDescription?: RtcSessionDescriptionInit | null
   onconnectionstatechange: (() => void) | null
   oniceconnectionstatechange: (() => void) | null
   onicegatheringstatechange: (() => void) | null
@@ -140,7 +141,8 @@ export async function loadNodeRtcFactory(options: WeriftFactoryOptions = {}): Pr
   const nativeFactory = isElectronRuntime()
     ? await loadExternalNativeRtcFactory().catch(() => undefined)
     : await loadNativeRtcFactory().catch(() => undefined)
-  return nativeFactory ?? await loadWeriftFactory(options)
+  const factory = nativeFactory ?? await loadWeriftFactory(options)
+  return factory === undefined ? undefined : wrapLocalCandidateFilterFactory(factory, options)
 }
 
 /** Load (once) a werift-backed factory, or `undefined` when it cannot be loaded. */
@@ -189,6 +191,7 @@ function buildNativeRtcFactory(
         get iceConnectionState(): string { return raw.iceConnectionState },
         get iceGatheringState(): string { return raw.iceGatheringState },
         get signalingState(): string { return raw.signalingState },
+        get localDescription(): RtcSessionDescriptionInit | null | undefined { return raw.localDescription },
         set onconnectionstatechange(value) { raw.onconnectionstatechange = value },
         get onconnectionstatechange() { return raw.onconnectionstatechange },
         set oniceconnectionstatechange(value) { raw.oniceconnectionstatechange = value },
@@ -415,13 +418,15 @@ export function detectHostIpv4Candidates(
 ): string[] {
   const candidates: Array<{ name: string; ip: string; score: number }> = []
   const routePreference = new Map(preferredHostIpv4Candidates.map((ip, index) => [ip, 10_000 - index]))
-  for (const [name, addresses] of Object.entries(interfaces)) {
-    const interfaceScore = physicalInterfaceScore(name)
+  for (const [name, addresses = []] of Object.entries(interfaces)) {
+    const tailscale = isTailscaleInterface(name, addresses)
+    const interfaceScore = tailscale ? 0 : physicalInterfaceScore(name)
     if (interfaceScore === undefined) continue
-    for (const address of addresses ?? []) {
+    for (const address of addresses) {
       if (address.internal || !isIpv4Family(address.family)) continue
       const ip = address.address
       if (!isUsableIpv4(ip)) continue
+      if (tailscale ? !isCgnat(ip) : isCgnat(ip)) continue
       candidates.push({
         name,
         ip,
@@ -469,6 +474,142 @@ function shouldUseLocalCandidate(candidate: WeriftCandidate, allowedHostIpv4: Re
     return allowedHostIpv4.has(candidate.relatedAddress)
   }
   return true
+}
+
+/**
+ * Wrap any RtcPeerConnectionFactory with a backend-agnostic local ICE candidate
+ * filter covering both SDP `a=candidate:` lines and trickle `onicecandidate`.
+ * Proxy TUN interfaces (for example Clash) commonly expose benchmark-range
+ * addresses that can never form a usable remote path.
+ */
+export function wrapLocalCandidateFilterFactory(
+  factory: RtcPeerConnectionFactory,
+  options: Pick<WeriftFactoryOptions, 'interfaces'> = {},
+): RtcPeerConnectionFactory {
+  return {
+    create(configuration) {
+      const blockedHostAddresses = detectBlockedHostAddresses(options.interfaces ?? networkInterfaces())
+      const raw = factory.create(configuration)
+      let onIceCandidate: ((event: { candidate: RtcIceCandidateInit | null }) => void) | null = null
+
+      const shouldAllow = (candidate: RtcIceCandidateInit): boolean => {
+        if (shouldAdvertiseFilteredLocalCandidate(candidate, blockedHostAddresses)) return true
+        configuration.onDiagnostic?.({
+          type: 'local-candidate-filtered',
+          candidate: summarizeIceCandidate(candidate),
+          reason: 'local-host-not-allowed',
+        })
+        return false
+      }
+
+      const filterDescription = (
+        description: RtcSessionDescriptionInit,
+        emitDiagnostic: boolean,
+      ): RtcSessionDescriptionInit => {
+        if (description.sdp === undefined || description.sdp.length === 0) return description
+        const lineEnding = description.sdp.includes('\r\n') ? '\r\n' : '\n'
+        const lines = description.sdp.split(/\r?\n/)
+        let changed = false
+        const keptLines: string[] = []
+        for (const line of lines) {
+          if (/^a=candidate:/i.test(line)) {
+            const candidate: RtcIceCandidateInit = { candidate: line.slice(2) }
+            const allowed = emitDiagnostic
+              ? shouldAllow(candidate)
+              : shouldAdvertiseFilteredLocalCandidate(candidate, blockedHostAddresses)
+            if (!allowed) {
+              changed = true
+              continue
+            }
+          }
+          keptLines.push(line)
+        }
+        return changed ? { type: description.type, sdp: keptLines.join(lineEnding) } : description
+      }
+
+      raw.onicecandidate = event => {
+        if (onIceCandidate === null) return
+        if (event.candidate !== null && !shouldAllow(event.candidate)) return
+        onIceCandidate(event)
+      }
+
+      return {
+        get connectionState(): string { return raw.connectionState },
+        get iceConnectionState(): string { return raw.iceConnectionState },
+        get iceGatheringState(): string { return raw.iceGatheringState },
+        get signalingState(): string { return raw.signalingState },
+        get localDescription(): RtcSessionDescriptionInit | null | undefined {
+          const current = raw.localDescription
+          return current === undefined || current === null ? current : filterDescription(current, false)
+        },
+        set onconnectionstatechange(value) { raw.onconnectionstatechange = value },
+        get onconnectionstatechange() { return raw.onconnectionstatechange },
+        set oniceconnectionstatechange(value) { raw.oniceconnectionstatechange = value },
+        get oniceconnectionstatechange() { return raw.oniceconnectionstatechange },
+        set onicegatheringstatechange(value) { raw.onicegatheringstatechange = value },
+        get onicegatheringstatechange() { return raw.onicegatheringstatechange },
+        set onicecandidate(value) { onIceCandidate = value },
+        get onicecandidate() { return onIceCandidate },
+        set ondatachannel(value) { raw.ondatachannel = value },
+        get ondatachannel() { return raw.ondatachannel },
+        createDataChannel(label, init) { return raw.createDataChannel(label, init) },
+        async createOffer() { return filterDescription(await raw.createOffer(), true) },
+        async createAnswer() { return filterDescription(await raw.createAnswer(), true) },
+        setLocalDescription(description) {
+          return raw.setLocalDescription(description === undefined ? undefined : filterDescription(description, false))
+        },
+        setRemoteDescription(description) { return raw.setRemoteDescription(description) },
+        addIceCandidate(candidate) { return raw.addIceCandidate(candidate) },
+        getStats() { return raw.getStats() },
+        close() { raw.close() },
+      }
+    },
+  }
+}
+
+export function detectBlockedHostAddresses(
+  interfaces: NodeJS.Dict<NetworkInterfaceInfo[] | undefined>,
+): Set<string> {
+  const allowed = new Set<string>()
+  const blocked = new Set<string>()
+  for (const [name, addresses = []] of Object.entries(interfaces)) {
+    const tailscale = isTailscaleInterface(name, addresses)
+    const physical = physicalInterfaceScore(name) !== undefined
+    for (const { address, internal } of addresses) {
+      if (internal) continue
+      const normalized = normalizeHostAddress(address)
+      if (normalized.length === 0) continue
+      if (tailscale) {
+        if ((isCgnat(normalized) || isTailscaleIpv6Address(normalized)) && !isBenchmarkHostAddress(normalized)) {
+          allowed.add(normalized)
+        } else {
+          blocked.add(normalized)
+        }
+        continue
+      }
+      if (physical) {
+        if (!isBenchmarkHostAddress(normalized)) allowed.add(normalized)
+        continue
+      }
+      blocked.add(normalized)
+    }
+  }
+  for (const address of allowed) blocked.delete(address)
+  return blocked
+}
+
+export function shouldAdvertiseFilteredLocalCandidate(
+  candidate: RtcIceCandidateInit,
+  blockedHostAddresses: ReadonlySet<string>,
+): boolean {
+  const parsed = parseIceCandidate(candidate)
+  if (parsed === undefined || parsed.type !== 'host' || parsed.host === undefined) return true
+  const rawHost = parsed.host.trim().toLowerCase()
+  if (isBenchmarkHostAddress(rawHost)) return false
+  if (rawHost.startsWith('::ffff:') && blockedHostAddresses.has(rawHost.slice('::ffff:'.length))) {
+    return false
+  }
+  return !blockedHostAddresses.has(normalizeHostAddress(rawHost))
 }
 
 function localCandidate(pair: WeriftCandidatePair): WeriftCandidate | undefined {
@@ -583,7 +724,7 @@ function parseIceCandidate(candidate: RtcIceCandidateInit): WeriftCandidate | un
 
 function physicalInterfaceScore(name: string): number | undefined {
   const value = name.toLowerCase()
-  if (/^(utun|tun|tap|ppp|bridge|awdl|llw|gif|stf|anpi|ap\d|vmnet|veth|docker|br-|vboxnet|lo)/.test(value)) {
+  if (/^(utun|tun|tap|ppp|bridge|awdl|llw|gif|stf|anpi|ap\d|vmnet|veth|docker|br-|vboxnet|lo|flclash|mihomo|clash|meta|sing-?box|tailscale|zerotier|zt[0-9a-f]|wg\d|wintun|proton|surge)/.test(value)) {
     return undefined
   }
   if (/^(eth|eno|ens|enp)/.test(value)) return 500
@@ -600,7 +741,29 @@ function isUsableIpv4(ip: string): boolean {
   if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false
   if (parts[0] === 0 || parts[0] === 127 || parts[0] >= 224) return false
   if (parts[0] === 169 && parts[1] === 254) return false
-  return !isCgnat(ip)
+  // Benchmark addresses are commonly assigned to proxy TUN interfaces.
+  if (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)) return false
+  // CGNAT stays usable: Tailscale overlays assign 100.64/10 addresses that can
+  // form a real remote path, while physical CGNAT interfaces are skipped above.
+  return true
+}
+
+function normalizeHostAddress(address: string): string {
+  const value = address.trim().toLowerCase()
+  if (value.startsWith('::ffff:')) return value.slice('::ffff:'.length)
+  if (value.startsWith('[') && value.endsWith(']')) return value.slice(1, -1)
+  return value
+}
+
+function isBenchmarkHostAddress(address: string): boolean {
+  const value = normalizeHostAddress(address)
+  if (value.includes(':')) return false
+  const parts = value.split('.').map(Number)
+  return parts.length === 4 && parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)
+}
+
+function isTailscaleIpv6Address(address: string): boolean {
+  return address.toLowerCase().startsWith('fd7a:115c:a1e0:')
 }
 
 function isCgnat(ip: string): boolean {

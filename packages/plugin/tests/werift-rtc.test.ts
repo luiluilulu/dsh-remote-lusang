@@ -4,8 +4,12 @@ import type { NetworkInterfaceInfo } from 'node:os'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { RtcDataChannelTransport } from '@dsh-remote/webrtc'
-import { describe, expect, it } from 'vitest'
+import {
+  RtcDataChannelTransport,
+  type RtcPeerConnection,
+  type RtcPeerConnectionFactory,
+} from '@dsh-remote/webrtc'
+import { describe, expect, it, vi } from 'vitest'
 import { buildExternalNativeRtcFactory, resolveNativeRtcRequireFrom } from '../src/native-rtc-helper.js'
 import {
   buildWeriftFactory,
@@ -14,6 +18,7 @@ import {
   loadWeriftFactory,
   orderIceServersForWerift,
   shouldAdvertiseCandidate,
+  wrapLocalCandidateFilterFactory,
 } from '../src/werift-rtc.js'
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
@@ -93,6 +98,27 @@ describe('werift RTC backend', () => {
       en0: [ipv4('192.168.75.58')],
       eth0: [ipv4('10.0.0.7')],
     }, ['192.168.50.10'])).toEqual(['192.168.50.10', '10.0.0.7', '192.168.75.58'])
+  })
+
+  it('offers CGNAT IPv4 only on recognized Tailscale interfaces', () => {
+    const scenarios = [
+      { name: 'Linux Tailscale', interfaces: { tailscale0: [ipv4('100.64.0.8')] }, expected: ['100.64.0.8'] },
+      { name: 'Windows Tailscale', interfaces: { Tailscale: [ipv4('100.64.0.8')] }, expected: ['100.64.0.8'] },
+      {
+        name: 'macOS Tailscale',
+        interfaces: { utun5: [ipv4('100.64.0.8'), ipv4('10.0.0.1'), ipv6('fd7a:115c:a1e0::8')] },
+        expected: ['100.64.0.8'],
+      },
+      {
+        name: 'unrecognized tunnel and carrier CGNAT',
+        interfaces: { utun5: [ipv4('100.64.0.8'), ipv6('fd00::8')], eth0: [ipv4('100.64.0.9')] },
+        expected: [],
+      },
+    ]
+    for (const { name, interfaces, expected } of scenarios) {
+      expect(detectHostIpv4Candidates({ ...interfaces, en0: [ipv4('192.168.50.10')] }), name)
+        .toEqual(['192.168.50.10', ...expected])
+    }
   })
 
   it('filters virtual Host candidates while preserving TURN fallback candidates', () => {
@@ -349,3 +375,91 @@ function ipv4(address: string): NetworkInterfaceInfo {
     cidr: `${address}/24`,
   }
 }
+
+function ipv6(address: string): NetworkInterfaceInfo {
+  return {
+    address,
+    netmask: 'ffff:ffff:ffff:ffff::',
+    family: 'IPv6',
+    mac: '00:00:00:00:00:00',
+    internal: false,
+    cidr: `${address}/64`,
+    scopeid: 0,
+  }
+}
+
+describe('local candidate filtering for native RTC factories', () => {
+  it('drops proxy TUN and benchmark host candidates from SDP and trickle ICE', async () => {
+    const candidateLines = [
+      'candidate:1 1 udp 2130706431 198.18.0.1 5000 typ host generation 0',
+      'candidate:2 1 udp 2130706431 198.19.255.254 5001 typ host generation 0',
+      'candidate:3 1 udp 2130706431 ::ffff:198.18.0.2 5002 typ host generation 0',
+      'candidate:4 1 udp 2130706431 10.99.0.1 5003 typ host generation 0',
+      'candidate:5 1 udp 2130706431 10.251.1.1 5005 typ host generation 0',
+      'candidate:6 1 udp 2130706431 192.168.31.238 5006 typ host generation 0',
+      'candidate:7 1 udp 2130706431 100.64.0.8 5008 typ host generation 0',
+    ]
+    const allowed = [candidateLines[5], candidateLines[6]]
+    const buildSdp = (lines: string[]) => [
+      'v=0',
+      'o=- 1 2 IN IP4 127.0.0.1',
+      's=-',
+      'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+      ...lines.map(line => `a=${line}`),
+      'a=end-of-candidates',
+      '',
+    ].join('\r\n')
+    let rawInstance: RtcPeerConnection | undefined
+    const rawFactory: RtcPeerConnectionFactory = {
+      create() {
+        const pc: RtcPeerConnection = {
+          connectionState: 'new',
+          iceConnectionState: 'new',
+          iceGatheringState: 'new',
+          signalingState: 'stable',
+          onconnectionstatechange: null,
+          oniceconnectionstatechange: null,
+          onicegatheringstatechange: null,
+          onicecandidate: null,
+          ondatachannel: null,
+          createDataChannel() { throw new Error('not used') },
+          async createOffer() { return { type: 'offer', sdp: buildSdp(candidateLines) } },
+          async createAnswer() { return { type: 'answer', sdp: buildSdp(candidateLines) } },
+          async setLocalDescription() {},
+          async setRemoteDescription() {},
+          async addIceCandidate() {},
+          async getStats() { return [] },
+          close() {},
+        }
+        rawInstance = pc
+        return pc
+      },
+    }
+    const factory = wrapLocalCandidateFilterFactory(rawFactory, {
+      interfaces: {
+        Mihomo: [ipv4('10.99.0.1'), ipv4('198.18.0.1'), ipv6('fd00:99::1')],
+        FlClash: [ipv4('198.18.0.2')],
+        utun4: [ipv4('10.251.1.1')],
+        utun5: [ipv4('100.64.0.8'), ipv6('fd7a:115c:a1e0::8')],
+        wlan0: [ipv4('192.168.31.238')],
+      },
+    })
+
+    const pc = factory.create({})
+    const offer = await pc.createOffer()
+    const answer = await pc.createAnswer()
+    expect(offer.sdp).toBe(buildSdp(allowed))
+    expect(answer.sdp).toBe(buildSdp(allowed))
+
+    const advertise = vi.fn()
+    pc.onicecandidate = advertise
+    for (const line of candidateLines) {
+      rawInstance!.onicecandidate?.({ candidate: { candidate: line, sdpMid: '0', sdpMLineIndex: 0 } })
+    }
+    rawInstance!.onicecandidate?.({ candidate: null })
+    expect(advertise.mock.calls.map(call => {
+      const event = call[0] as { candidate: { candidate: string } | null }
+      return event.candidate === null ? null : event.candidate.candidate
+    })).toEqual([...allowed, null])
+  })
+})
