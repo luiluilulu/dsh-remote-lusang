@@ -1,3 +1,21 @@
+## 0.6.4-own.15 — 2026-11-25
+
+Android build 86. 从上游精选修复（不整包合并）。
+
+### English
+
+- Connection: proxy TUN interfaces (Clash/Mihomo/sing-box/wintun and similar) no longer leak `198.18.0.0/15` or unknown virtual-interface host candidates into SDP or trickle ICE, so a local VPN adapter no longer breaks direct LAN/P2P attempts; recognized Tailscale interfaces may offer their CGNAT/ULA candidates, and Host ICE candidate-pair selection now matches the client.
+- Sessions: abandoned blank sessions are hidden from the drawer and search, blank conversations are reused within a workspace, and ACP workspace deletion now persists across refreshes and restarts.
+- Terminal: typed input from the Desktop terminal reaches the Remote terminal controller again.
+- Everything else in `0.6.4-own.14.1` is unchanged.
+
+### 中文
+
+- 连接：Clash/Mihomo/sing-box/wintun 等代理 TUN 接口不再把 `198.18.0.0/15` 或未知虚拟网卡地址泄漏进 SDP/trickle ICE，本机 VPN 不再破坏直连（LAN/P2P）尝试；识别 Tailscale 接口并允许其 CGNAT/ULA 候选；Host 侧 ICE candidate-pair 选择与客户端对齐。
+- 会话：抽屉与搜索隐藏废弃空会话、同工作区复用空会话；ACP 后端工作区删除在刷新与重启后保持生效。
+- 终端：Desktop 终端的键盘输入重新能到达 Remote 终端控制器。
+- `0.6.4-own.14.1` 的其余内容不变。
+
 ## 0.6.4-own.14.1 — 2026-11-14
 
 Android build 85. Patch release for the fork.
