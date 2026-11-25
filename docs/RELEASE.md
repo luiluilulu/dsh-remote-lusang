@@ -17,8 +17,8 @@ unaffected.
 ## 2. Build the APK
 
 The build runs from a clean worktree pinned to the release commit, so untracked local
-state cannot leak into the artifact. Use the shared build script; it puts the only
-workspace under `%TEMP%\dsh-remote-fork-build` and removes it afterwards:
+state cannot leak into the artifact. Use the shared build script; it keeps the only
+workspace at `artifacts/android-build/worktree` and removes it afterwards:
 
 ```powershell
 pwsh -File "C:\Users\lusang\Desktop\03_项目与编程\artifacts\android-build\build-fork.ps1" `
@@ -29,8 +29,10 @@ pwsh -File "C:\Users\lusang\Desktop\03_项目与编程\artifacts\android-build\b
 
 **Never create per-version worktree folders inside the shared `03_项目与编程` directory**
 (`dsh-remote-own7` … `dsh-remote-ownN`): that directory is shared with other projects.
-The script reuses one temp workspace and cleans it up, including on failure
-(`-KeepWorktree` only for debugging).
+The script reuses one workspace and cleans it up, including on failure
+(`-KeepWorktree` only for debugging). Keep the workspace under `artifacts/`: Hermes'
+release-bytecode step intermittently fails with `permission denied` when the worktree
+lives under `%TEMP%`.
 
 Expected: `BUILD SUCCESSFUL in ~4–5 min`, APK ≈ 62–66 MB, `versionCode` matches
 `app.json`. Record bytes + SHA-256 next to the APK

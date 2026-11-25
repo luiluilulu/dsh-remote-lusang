@@ -19,11 +19,15 @@
   次级页面（Bot 模式、插件页、自动化任务页、设备列表/主机切换）也已扁平官方化，差距清单见
   `docs/design/OFFICIAL-UI-ALIGNMENT.md`。设计事实源：
   `artifacts/research/lead-ref/OFFICIAL-UI-REFERENCE.md`（已忽略，不入库）。
-- **own.14 / own.14.1 已发布（2026-11-14）**：`v0.6.4-own.14`（APK 65,811,469 B）与
-  `v0.6.4-own.14.1`（versionCode 85，65,799,385 B，移除语音输入入口并 block 掉 `RECORD_AUDIO`）
-  的 tag + GitHub Release 均已发布，`releases/latest` 现指向 own.14.1。
-  Host 插件新能力的本地包在 `artifacts/android-build/plugin-release/`（未提交 dist，已本地安装并重启验证）；
+- **own.14 / own.14.1 / own.15 已发布**：`v0.6.4-own.14`、`v0.6.4-own.14.1`（versionCode 85，
+  移除语音输入并 block 掉 `RECORD_AUDIO`）与 `v0.6.4-own.15`（versionCode 86，2026-11-25）的
+  tag + GitHub Release 均已发布，`releases/latest` 现指向 own.15。own.15 从上游精选
+  `bcea89a7`/`f214c5ab`/`f85616df`/`bcc94ca1`/`49a73f79`，并手工移植 `9aba61c4`+`83229099` 的
+  ICE 候选过滤（代理 TUN 的 `198.18.0.0/15` 与 Tailscale 识别）。Host 插件新能力的本地包在
+  `artifacts/android-build/plugin-release/`（未提交 dist，已本地安装并重启验证）；
   发版流程见 `docs/RELEASE.md`。真机待回归：朗读、取字、链接总结、网页搜索、P2P/Relay 链路。
+  **构建约束**：不要在共享的 `03_项目与编程` 顶层建按版本命名的 worktree，统一用
+  `artifacts/android-build/build-fork.ps1`（单一 workspace，构建后自动删除）。
 
 ## 版本号与发布节奏（用户明确要求）
 
