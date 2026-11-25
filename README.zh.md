@@ -106,7 +106,7 @@ DSH 0.2.2 起，npm 安装支持在插件页检查版本和一键更新；热更
 
 默认使用本项目提供的[https://dsh.r2049.cn](https://dsh.r2049.cn)托管 Remote Server。
 
-自建托管Server可使用仓库内的[最小 Server](apps/server/README.zh.md)，当前版本已包含 WebRTC LAN/P2P/TURN 连接协调（TURN 需自行部署 coturn）与加密 Relay Server 等功能，暂不支持托管Remote Web的完整功能。
+自建托管Server可使用仓库内的[最小 Server](apps/server/README.zh.md)，当前版本已包含 WebRTC LAN/P2P/TURN 连接协调（TURN 需自行部署 coturn）与加密 Relay Server 等功能，暂不支持托管Remote Web的完整功能。想让自己和朋友各自用电脑当 Host、不经过公共服务器，按[自建 Server 快速上手](docs/self-host-quickstart.zh.md)操作即可（自建后只有账号密码登录，不会出现知乎/GitHub 按钮）。
 
 ## 界面截图
 
