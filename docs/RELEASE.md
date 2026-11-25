@@ -17,14 +17,20 @@ unaffected.
 ## 2. Build the APK
 
 The build runs from a clean worktree pinned to the release commit, so untracked local
-state cannot leak into the artifact:
+state cannot leak into the artifact. Use the shared build script; it puts the only
+workspace under `%TEMP%\dsh-remote-fork-build` and removes it afterwards:
 
 ```powershell
-# copied from artifacts/android-build/ux-logs/build-ownN.ps1
-git worktree add <root>\dsh-remote-ownN <commit>
-# worktree: pnpm install (NODE_ENV unset), packages build, renderers, tsc,
-# expo prebuild, trial patches, gradle assembleRelease arm64-v8a
+pwsh -File "C:\Users\lusang\Desktop\03_项目与编程\artifacts\android-build\build-fork.ps1" `
+  -Commit <commit> -ApkName dsh-remote-own-0.6.4-ownN-arm64.apk
+# steps: worktree add --detach, pnpm install (NODE_ENV unset), packages build,
+# renderers, tsc, expo prebuild, trial patches, gradle assembleRelease arm64-v8a
 ```
+
+**Never create per-version worktree folders inside the shared `03_项目与编程` directory**
+(`dsh-remote-own7` … `dsh-remote-ownN`): that directory is shared with other projects.
+The script reuses one temp workspace and cleans it up, including on failure
+(`-KeepWorktree` only for debugging).
 
 Expected: `BUILD SUCCESSFUL in ~4–5 min`, APK ≈ 62–66 MB, `versionCode` matches
 `app.json`. Record bytes + SHA-256 next to the APK
