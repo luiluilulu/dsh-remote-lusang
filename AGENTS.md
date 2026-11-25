@@ -25,7 +25,7 @@
   `bcea89a7`/`f214c5ab`/`f85616df`/`bcc94ca1`/`49a73f79`，并手工移植 `9aba61c4`+`83229099` 的
   ICE 候选过滤（代理 TUN 的 `198.18.0.0/15` 与 Tailscale 识别）。Host 插件新能力的本地包在
   `artifacts/android-build/plugin-release/`（未提交 dist，已本地安装并重启验证）；
-  发版流程见 `docs/RELEASE.md`。真机待回归：朗读、取字、链接总结、网页搜索、P2P/Relay 链路。
+  发版流程见 `docs/RELEASE.md`。真机已验证（2026-11-25）：own.15 + 本地插件重启后 P2P 直连正常；朗读、取字、链接总结、网页搜索仍待逐项回归。
   **构建约束**：不要在共享的 `03_项目与编程` 顶层建按版本命名的 worktree，统一用
   `artifacts/android-build/build-fork.ps1`（单一 workspace，构建后自动删除）。
 
